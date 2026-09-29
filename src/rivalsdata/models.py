@@ -81,8 +81,8 @@ class DataModel(Mapping[str, Any]):
 
     def __iter__(self) -> Iterator[str]:
         keys = list(self._data)
-        for key in ("hero_name", "top_hero_name"):
-            if key not in self._data and self[key] is not None:
+        for key, value in (("hero_name", self.hero_name), ("top_hero_name", self.top_hero_name)):
+            if key not in self._data and value is not None:
                 keys.append(key)
         return iter(keys)
 
