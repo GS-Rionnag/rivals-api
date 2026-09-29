@@ -70,11 +70,13 @@ private.
 `show_player_dashboard` fetches current data, then returns an HTML UI resource
 alongside the tool result. It advertises the dashboard through
 `_meta.ui.resourceUri`, uses the `text/html;profile=mcp-app` resource MIME type,
-and includes `openai/outputTemplate` as a ChatGPT compatibility alias. A host
-with MCP Apps support can render it in a sandboxed panel; MCP-UI metadata keeps
-the preferred frame size for compatible hosts. Hosts without UI support can
-still use the regular MCP tools and their text/data responses. The dashboard
-is a snapshot from the time the tool runs; ask for it again to refresh.
+and registers that URI for `resources/read` so the host can actually load the
+app frame. The tool result carries the rendered dashboard as structured content
+for the app frame and an embedded HTML resource for older MCP-UI clients. It
+also includes `openai/outputTemplate` as a ChatGPT compatibility alias. Hosts
+without UI support still receive a text result and can use the regular MCP
+tools. The dashboard is a snapshot from the time the tool runs; ask for it
+again to refresh.
 The `section` argument defaults to `live_match`; use `hero_form` or
 `recent_matches` in separate calls when you need those views.
 

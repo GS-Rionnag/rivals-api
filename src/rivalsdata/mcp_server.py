@@ -21,7 +21,7 @@ except ImportError as exc:  # pragma: no cover - depends on optional extra
 
 from .client import RivalsDataClient
 from mcp_ui_server import create_ui_resource
-from mcp_ui_server.core import UIResource
+from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourceContents
 
 
 mcp = FastMCP(
@@ -37,6 +37,41 @@ mcp = FastMCP(
 
 PLAYER_DASHBOARD_URI = "ui://rivalsdata/player-dashboard"
 MCP_APP_HTML_MIME_TYPE = "text/html;profile=mcp-app"
+PLAYER_DASHBOARD_APP_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;width:100%;height:100%;background:#0d0f12;color:#f0f1f3}
+body{font:14px system-ui,-apple-system,Segoe UI,sans-serif}
+iframe{display:block;border:0;width:100%;height:100%;min-height:600px}
+#status{padding:18px;color:#a9adb6}</style></head><body>
+<div id="status">Loading RivalsData dashboard…</div>
+<script>
+addEventListener('message', event => {
+  const message = event.data;
+  if (!message || message.method !== 'ui/notifications/tool-result') return;
+  const html = message.params?.structuredContent?.html;
+  if (typeof html !== 'string') {
+    document.getElementById('status').textContent = 'Dashboard data was not included.';
+    return;
+  }
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.title = 'RivalsData player dashboard';
+  frame.srcdoc = html;
+  document.body.replaceChildren(frame);
+});
+</script></body></html>"""
+
+
+@mcp.resource(
+    PLAYER_DASHBOARD_URI,
+    name="RivalsData player dashboard",
+    description="Interactive UI for the show_player_dashboard tool.",
+    mime_type=MCP_APP_HTML_MIME_TYPE,
+)
+def player_dashboard_app() -> str:
+    """Return the static frame for the dashboard tool's rendered result."""
+    return PLAYER_DASHBOARD_APP_HTML
 
 
 def _plain(value: Any) -> Any:
@@ -86,7 +121,7 @@ def get_current_match(uid_or_name: str) -> Any:
 def show_player_dashboard(
     uid_or_name: str,
     section: Literal["live_match", "hero_form", "recent_matches"] = "live_match",
-) -> list[UIResource]:
+) -> CallToolResult:
     """Show a player card with one freshly fetched data section.
 
     Fetches a fresh profile and at most one additional endpoint, selected by
@@ -308,14 +343,27 @@ justify-content:space-between;flex-wrap:wrap;color:#a9adb6;font-size:10px;font-v
  {f'<div class="data-grid">{hero_chart}{recent_section}</div>' if hero_chart or recent_section else ''}
 <p class="source-note">RivalsData public profile · data shown as returned by the source</p>
 </main></body></html>"""
-    resource = create_ui_resource({
+    legacy_resource = create_ui_resource({
         "uri": PLAYER_DASHBOARD_URI,
         "content": {"type": "rawHtml", "htmlString": html},
         "encoding": "text",
         "uiMetadata": {"preferred-frame-size": [850, 980]},
-        "resourceProps": {"mimeType": MCP_APP_HTML_MIME_TYPE},
+        "resourceProps": {"mimeType": "text/html"},
     })
-    return [resource]
+    return CallToolResult(
+        content=[
+            TextContent(type="text", text=f"Player dashboard for {player_name}."),
+            EmbeddedResource(
+                type="resource",
+                resource=TextResourceContents(
+                    uri=PLAYER_DASHBOARD_URI,
+                    mimeType="text/html",
+                    text=legacy_resource["resource"]["text"],
+                ),
+            ),
+        ],
+        structuredContent={"html": html, "section": section},
+    )
 
 
 @mcp.tool()
