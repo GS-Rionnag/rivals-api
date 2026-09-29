@@ -45,6 +45,68 @@ with RivalsDataClient() as rd:
 print(hero_season[0].win_rate)  # integer percent when wins/losses are present
 ```
 
+## MCP server (ChatGPT and Claude)
+
+Install the MCP extra and the package:
+
+```console
+python -m pip install 'rivalsdata-api[mcp]'
+```
+
+The server exposes read-only tools for player search and profiles, a player's
+current live match (when they are in one), match history, player stats,
+leaderboards, heroes, team-ups, public insights, matches, and factions. The
+`show_player_dashboard` tool also returns an MCP-UI player report with rank and
+competitive record, current match roster split by side, a hero win-rate chart,
+and recent match form with K/D/A. It supports local stdio for Claude Desktop
+and Streamable HTTP for remote MCP clients such as ChatGPT. Data comes from
+RivalsData's undocumented API and may change; profile match history can be
+private.
+
+### How the MCP UI works
+
+`show_player_dashboard` fetches current data, then returns an HTML UI resource
+alongside the tool result. MCP-UI labels it with a `ui://` resource URI and
+preferred size. A compatible host can render that resource in a sandboxed
+panel; a host without UI support can still use the regular MCP tools and their
+text/data responses. ChatGPT uses MCP-UI's Apps SDK adapter, while Claude is
+listed as supporting MCP Apps directly. The dashboard is a snapshot from the
+time the tool runs; ask for it again to refresh.
+
+### Claude Desktop (local)
+
+Add a server entry to Claude Desktop's `claude_desktop_config.json`, replacing
+the path with the Python executable in the environment where the extra is
+installed:
+
+```json
+{
+  "mcpServers": {
+    "rivalsdata": {
+      "command": "C:\\path\\to\\venv\\Scripts\\python.exe",
+      "args": ["-m", "rivalsdata.mcp_server"]
+    }
+  }
+}
+```
+
+On macOS/Linux, use the environment's `bin/python` path. Restart Claude Desktop
+after saving the configuration.
+
+### ChatGPT or remote Claude connector
+
+Run the server on a host reachable over HTTPS:
+
+```console
+rivalsdata-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+The MCP endpoint is `/mcp` (for example, `https://your-host.example/mcp`). Add
+that endpoint through the client's custom/remote MCP connector settings. The
+server does not implement authentication; put it behind an authenticated
+HTTPS gateway before exposing it publicly. For local development, bind to
+`127.0.0.1` instead. Use `python -m rivalsdata.mcp_server --help` to see options.
+
 `Player` and returned `DataModel` objects support both mapping access and
 attribute access (`player["level"]` or `player.level`). Nested dictionaries
 and arrays are wrapped recursively; `.raw` returns a shallow copy of a model's
