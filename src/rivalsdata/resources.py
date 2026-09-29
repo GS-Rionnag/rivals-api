@@ -188,6 +188,30 @@ class PlayerMatches(PlayerResource):
         return _one(self._post(path, **payload))
 
 
+class PlayerLiveGame(PlayerResource):
+    """Current live match data for a player whose profile status is in-game.
+
+    The site supplies the opaque match ID in the player's ``status.battle_id``
+    field. A fresh player profile is needed to discover the current match.
+    """
+
+    def __init__(self, client: Any, player_data: dict[str, Any]) -> None:
+        super().__init__(client, int(player_data["uid"]))
+        self._player_data = player_data
+
+    def fetch(self) -> DataModel | None:
+        """Fetch the current live match, or return ``None`` if out of game."""
+        status = self._player_data.get("status")
+        if not isinstance(status, dict):
+            return None
+        match_id = status.get("battle_id")
+        if not match_id:
+            return None
+        return _one(self._client._post_json(
+            "/live", {"match_id": str(match_id), "uid": self.uid}
+        ))
+
+
 class PlayerTeammates(PlayerResource):
     def fetch(self, *, season: int | None = None, mode: str | None = None) -> Any:
         payload = {key: value for key, value in (("season", season), ("mode", mode)) if value is not None}

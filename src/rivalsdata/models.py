@@ -110,6 +110,13 @@ class Player(DataModel):
         return PlayerMatches(self._client, int(self._data["uid"]))
 
     @property
+    def live_game(self) -> Any:
+        """The player's current live-game resource, if they are in a match."""
+        from .resources import PlayerLiveGame
+
+        return PlayerLiveGame(self._client, self._data)
+
+    @property
     def teammates(self) -> Any:
         from .resources import PlayerTeammates
 

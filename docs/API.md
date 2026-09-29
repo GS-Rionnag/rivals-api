@@ -13,6 +13,7 @@ keys.
 | --- | --- | --- | --- |
 | Search | `POST /players/search` | `{"name": name}` | Search rows; `aid` may contain the numeric UID after the final `_`. |
 | Player overview | `POST /player` | `{"uid": number}` | Object keys observed: `cached_at`, `claimed`, `faction`, `icon`, `last_seen`, `leaderboard`, `level`, `login_os`, `match_history_is_visible`, `mood`, `name`, `rank_game_season`, `status`, `uid`, `xp`. `rank_game_season` is keyed by game/season ids; competitive rows include `battle_count`, `rank_game_id`, `rank_score`, and `win_count`. |
+| Player live game | `POST /live` | `{"match_id": status.battle_id, "uid": number}` | Object keys observed: `players` (12 player entries keyed by team slot) and `team_avg_rank` (rank averages keyed by side). Player rows include `ai`, `games`, `icon`, `losses`, `name`, `proficiency`, `rank`, `side`, `team_id`, `top_heroes`, `uid`, and `wins`. The match ID comes from the player's current `/player` response; the endpoint was observed on a profile marked `In game (Competitive)`. |
 | Player hero summary | `POST /player/heroes` | `uid`, optional `season` | Array rows: `assists`, `deaths`, `games`, `hero_id`, `kda`, `kills`, `losses`, `rank`, `wins`. |
 | Player crosshairs | `POST /player/crosshairs` | `uid` | Array rows: `crosshair`, `uses`. |
 | Player match history | `POST /player/matches/cached` (or `/player/matches`) | `uid`, `cursor`, optional `season`; cached endpoint also accepts `mode`, `hero`, `teammate` | Cached response keys observed: `matches`, `next_cursor`, `source`; match rows include `assists`, `deaths`, `game_mode_id`, `game_play_mode_id`, `hero_id`, `is_mvp`, `is_svp`, `is_win`, `kills`, `map_id`, `match_uid`, `os`, `placement`, `platform`, `rank_level`, `rank_score`, `score_change`, `season`, `team_score`, `timestamp`, `winner_camp`. A sample profile marked its history private; a private profile can return no visible match rows. |
@@ -62,9 +63,10 @@ none of these, it returns `None`.
 | `/matches/{match_id}` | Match detail route linked from an expanded public match-history card. |
 | `/profiles` | Account-facing profile management page. |
 
-The Live Game tab is present in the UI, but the observed profile did not show
-live-game data and no corresponding endpoint was captured. It is not exposed as
-a guessed method.
+The Live Game tab requests `POST /live` for profiles whose `status.battle_id`
+is set. The client exposes this as `player.live_game.fetch()`. Since game status
+can change, load a fresh player profile before fetching; the method returns
+`None` when that profile has no active battle ID.
 
 ## Account actions and unresolved endpoints
 

@@ -31,6 +31,11 @@ with RivalsDataClient() as rd:
     map_stats = player.stats.maps(season=20)
     match_page = player.matches.fetch(season=20)
 
+    # Current match (None if the profile is not currently in a game).
+    live_game = player.live_game.fetch()
+    if live_game is not None:
+        print(live_game.players, live_game.team_avg_rank)
+
     # Site-wide resources are available from the client.
     leaderboard = rd.leaderboards.fetch(limit=100, season=20, platform=1)
     tier_list = rd.heroes.tier_list(platform=1, rank="grandmaster_plus")
@@ -57,7 +62,7 @@ preserve the complete payload.
 - `rd.factions.get(faction_id)`, `rd.matches.get(match_id)`,
   `rd.profiles.get(username)`, and `rd.favorites.fetch(uids)` — detail/profile
   lookups.
-- `player.heroes.fetch(...)`, `.matches.fetch(...)`, `.teammates.fetch(...)`,
+- `player.heroes.fetch(...)`, `.matches.fetch(...)`, `.live_game.fetch()`, `.teammates.fetch(...)`,
   `.crosshairs.fetch()`, `.proficiency.fetch()`, `.punishments.fetch()`,
   `.name_history.fetch()` — profile sections.
 - `player.stats.heroes(...)`, `.maps(...)`, `.bans(...)` — detailed profile stats.
