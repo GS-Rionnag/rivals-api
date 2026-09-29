@@ -7,7 +7,6 @@ Streamable HTTP (ChatGPT and other remote MCP clients).
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Mapping
 from html import escape
 from typing import Any
@@ -424,20 +423,13 @@ def get_faction(faction_id: str) -> Any:
     return _call(lambda client, value: client.factions.get(value), faction_id)
 
 
+# Uvicorn/ASGI entry point for remote Streamable HTTP deployments.
+app = mcp.streamable_http_app()
+
+
 def main() -> None:
-    """Start the MCP server over stdio or Streamable HTTP."""
-    parser = argparse.ArgumentParser(description="RivalsData MCP server")
-    parser.add_argument("--transport", choices=("stdio", "streamable-http"),
-                        default="stdio")
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="HTTP bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000,
-                        help="HTTP port (default: 8000)")
-    args = parser.parse_args()
-    if args.transport == "stdio":
-        mcp.run(transport="stdio")
-    else:
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+    """Start the server over stdio for local desktop clients."""
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

@@ -98,14 +98,15 @@ after saving the configuration.
 Run the server on a host reachable over HTTPS:
 
 ```console
-rivalsdata-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+uvicorn rivalsdata.mcp_server:app --host 0.0.0.0 --port 8000
 ```
 
 The MCP endpoint is `/mcp` (for example, `https://your-host.example/mcp`). Add
 that endpoint through the client's custom/remote MCP connector settings. The
 server does not implement authentication; put it behind an authenticated
 HTTPS gateway before exposing it publicly. For local development, bind to
-`127.0.0.1` instead. Use `python -m rivalsdata.mcp_server --help` to see options.
+`127.0.0.1` instead. The `app` is the MCP SDK's Streamable HTTP ASGI
+application; Uvicorn manages its lifespan and session manager.
 
 `Player` and returned `DataModel` objects support both mapping access and
 attribute access (`player["level"]` or `player.level`). Nested dictionaries
