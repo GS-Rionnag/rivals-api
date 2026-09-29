@@ -4,14 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rivalsdata-api"
-version = "0.2.0"
-description = "Unofficial Python client for public RivalsData data"
+version = "1.0.0"
+description = "Python client and MCP server for public Marvel Rivals stats from RivalsData"
+keywords = ["marvel-rivals", "rivalsdata", "game-stats", "api-client", "mcp"]
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -24,6 +25,12 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = ["curl-cffi>=0.7"]
+
+[project.urls]
+Homepage = "https://github.com/GS-Rionnag/rivalsdata-api"
+Repository = "https://github.com/GS-Rionnag/rivalsdata-api"
+Issues = "https://github.com/GS-Rionnag/rivalsdata-api/issues"
+Changelog = "https://github.com/GS-Rionnag/rivalsdata-api/releases"
 
 [project.optional-dependencies]
 browser = ["camoufox>=0.5.6"]
