@@ -7,6 +7,7 @@ from the site's public player page and search box.
 from __future__ import annotations
 
 import json
+import time
 import unicodedata
 from typing import Any
 from urllib.parse import urlencode
@@ -71,6 +72,18 @@ class RivalsDataClient:
     def __exit__(self, *_: object) -> None:
         self.close()
 
+    def _request_with_gateway_retries(
+        self, method: Any, path: str, **kwargs: Any
+    ) -> Any:
+        """Retry short-lived upstream gateway failures on read-only requests."""
+        url = f"{self.api_url}{path}"
+        for attempt in range(3):
+            response = method(url, timeout=self.timeout, **kwargs)
+            if response.status_code not in (502, 504) or attempt == 2:
+                break
+            time.sleep(0.25 * (attempt + 1))
+        return response
+
     def resolve_player(self, username: str) -> dict[str, Any]:
         """Search by username; add numeric uid to the source result."""
         query = username.strip()
@@ -120,8 +133,8 @@ class RivalsDataClient:
 
     def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         query = {key: value for key, value in (params or {}).items() if value is not None}
-        response = self.session.get(
-            f"{self.api_url}{path}", params=query, timeout=self.timeout
+        response = self._request_with_gateway_retries(
+            self.session.get, path, params=query
         )
         body = response.text
         blocked = (
@@ -190,8 +203,8 @@ class RivalsDataClient:
             ) from exc
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> Any:
-        response = self.session.post(
-            f"{self.api_url}{path}", json=payload, timeout=self.timeout
+        response = self._request_with_gateway_retries(
+            self.session.post, path, json=payload
         )
         body = response.text
         blocked = (
