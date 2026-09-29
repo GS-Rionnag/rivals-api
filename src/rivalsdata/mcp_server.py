@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from html import escape
-from typing import Any
+from typing import Any, Literal
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -34,6 +34,9 @@ mcp = FastMCP(
         "match history may be private. All tools are read-only."
     ),
 )
+
+PLAYER_DASHBOARD_URI = "ui://rivalsdata/player-dashboard"
+MCP_APP_HTML_MIME_TYPE = "text/html;profile=mcp-app"
 
 
 def _plain(value: Any) -> Any:
@@ -75,18 +78,28 @@ def get_current_match(uid_or_name: str) -> Any:
     return _call(fetch, uid_or_name)
 
 
-@mcp.tool()
-def show_player_dashboard(uid_or_name: str) -> list[UIResource]:
-    """Show an interactive player card with their current match status.
+@mcp.tool(meta={
+    "ui": {"resourceUri": PLAYER_DASHBOARD_URI},
+    # ChatGPT currently accepts this alias alongside the standard Apps key.
+    "openai/outputTemplate": PLAYER_DASHBOARD_URI,
+})
+def show_player_dashboard(
+    uid_or_name: str,
+    section: Literal["live_match", "hero_form", "recent_matches"] = "live_match",
+) -> list[UIResource]:
+    """Show a player card with one freshly fetched data section.
 
-    Fetches a fresh profile and current live-match data. The dashboard is
-    rendered by MCP-UI capable hosts; all values are escaped before HTML output.
+    Fetches a fresh profile and at most one additional endpoint, selected by
+    section. Call again with another section to retrieve more data without
+    combining live-match, hero, and match-history pulls. MCP Apps hosts can
+    render the returned dashboard resource; all values are escaped before HTML
+    output.
     """
     with RivalsDataClient() as client:
         player = client.get_player(uid_or_name)
-        live = _plain(player.live_game.fetch())
-        hero_rows = _plain(player.heroes.fetch())
-        history = _plain(player.matches.fetch())
+        live = _plain(player.live_game.fetch()) if section == "live_match" else None
+        hero_rows = _plain(player.heroes.fetch()) if section == "hero_form" else []
+        history = _plain(player.matches.fetch()) if section == "recent_matches" else {}
 
     player_name = str(player.get("name", uid_or_name))
     name = escape(player_name)
@@ -139,7 +152,7 @@ def show_player_dashboard(uid_or_name: str) -> list[UIResource]:
         + ("".join(chart_rows) if chart_rows else
            '<p class="empty">No hero win/loss data is available for this player.</p>')
         + '</section>'
-    )
+    ) if section == "hero_form" else ""
 
     match_rows = history.get("matches", []) if isinstance(history, Mapping) else []
     if not isinstance(match_rows, list):
@@ -174,9 +187,11 @@ def show_player_dashboard(uid_or_name: str) -> list[UIResource]:
            f'<span>{recent_kda:.2f} KDA</span></div>' if recent else
            '<p class="empty">No public match history is available for this player.</p>')
         + '</section>'
-    )
+    ) if section == "recent_matches" else ""
 
-    if isinstance(live, Mapping):
+    if section != "live_match":
+        match_section = ""
+    elif isinstance(live, Mapping):
         slots = live.get("players", {})
         teams: dict[str, list[str]] = {}
         if isinstance(slots, Mapping):
@@ -290,14 +305,15 @@ justify-content:space-between;flex-wrap:wrap;color:#a9adb6;font-size:10px;font-v
 <section class="panel"><div class="level-line"><div class="level-value">{level}</div>
 <div class="level-copy"><span>PLAYER LEVEL</span><b>{xp} XP</b><span>Lifetime experience</span></div></div></section></div>
 {match_section}
-<div class="data-grid">{hero_chart}{recent_section}</div>
+ {f'<div class="data-grid">{hero_chart}{recent_section}</div>' if hero_chart or recent_section else ''}
 <p class="source-note">RivalsData public profile · data shown as returned by the source</p>
 </main></body></html>"""
     resource = create_ui_resource({
-        "uri": "ui://rivalsdata/player-dashboard",
+        "uri": PLAYER_DASHBOARD_URI,
         "content": {"type": "rawHtml", "htmlString": html},
         "encoding": "text",
         "uiMetadata": {"preferred-frame-size": [850, 980]},
+        "resourceProps": {"mimeType": MCP_APP_HTML_MIME_TYPE},
     })
     return [resource]
 
