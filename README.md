@@ -72,7 +72,9 @@ Known `hero_id` and `top_hero_id` fields in MCP results include corresponding
 `hero_name` and `top_hero_name` fields. The `resolve_hero` tool accepts either
 a hero name or numeric ID. The pip package also exports `hero_name(id)` and
 `hero_id(name)`; returned `DataModel` rows provide `.hero_name` and
-`.top_hero_name` conveniences without changing their original `.raw` payload.
+`.top_hero_name` conveniences. Those resolved fields are included in mapping
+iteration and `.to_dict()` output to simplify serialization; `.raw` remains the
+untouched source payload.
 
 ### How the MCP UI works
 

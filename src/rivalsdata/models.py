@@ -80,10 +80,25 @@ class DataModel(Mapping[str, Any]):
         return _wrap(self._data[key])
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+        keys = list(self._data)
+        for key in ("hero_name", "top_hero_name"):
+            if key not in self._data and self[key] is not None:
+                keys.append(key)
+        return iter(keys)
 
     def __len__(self) -> int:
-        return len(self._data)
+        return sum(1 for _ in self)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly mapping, including resolved hero names."""
+        def convert(value: Any) -> Any:
+            if isinstance(value, DataModel):
+                return value.to_dict()
+            if isinstance(value, list):
+                return [convert(item) for item in value]
+            return value
+
+        return {key: convert(self[key]) for key in self}
 
     def __getattr__(self, name: str) -> Any:
         if name == "winrate":
