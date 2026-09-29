@@ -31,6 +31,7 @@ with RivalsDataClient() as rd:
 
     # Player profile sections are lazy resource managers.
     hero_season = player.heroes.fetch(season=20)
+    all_hero_seasons = player.heroes.fetch(season="all")
     map_stats = player.stats.maps(season=20)
     match_page = player.matches.fetch(season=20)
 

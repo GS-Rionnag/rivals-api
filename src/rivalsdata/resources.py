@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from .models import (
@@ -189,8 +189,14 @@ class PlayerResource:
 class PlayerHeroes(PlayerResource):
     """Per-player hero summary rows from ``POST /player/heroes``."""
 
-    def fetch(self, *, season: int | None = None) -> list[Character]:
-        payload = {"season": season} if season is not None else {}
+    def fetch(self, *, season: int | Literal["all"] | None = None) -> list[Character]:
+        """Fetch hero summaries for one season or all seasons.
+
+        ``season="all"`` uses the API's all-seasons selector (season ID -1).
+        Omitting ``season`` keeps the endpoint's default behavior.
+        """
+        season_id = -1 if season == "all" else season
+        payload = {"season": season_id} if season_id is not None else {}
         return _many(self._post("/player/heroes", **payload), Character)
 
 
