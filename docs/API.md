@@ -32,8 +32,8 @@ keys.
 | Punishments log | `GET /stats/punishments` | `kind`, optional `cursor` | Object: `last_update`, `next`, `results`; sample row keys: `expires_at`, `icon`, `issued_at`, `kind`, `name`, `peak_rank_level`, `peak_rank_score`, `rank`, `reason`, `uid`. |
 | XP leaderboard | `GET /stats/xp` | Optional `cursor` | Object: `last_update`, `next`, `results`; sample row keys: `icon`, `name`, `rank`, `uid`, `xp`. |
 | Top 500 finishes | `GET /stats/oaa` | `os` (Python `platform`) | Object: `count`, `last_update`, `os`, `players`; sample row keys: `avg_placement`, `avg_score`, `finishes`, `icon`, `name`, `seasons`, `uid`. |
-| Hero comm-ban insight | `GET /stats/commbans` | `mode` (`all` or `competitive`) | UI parser reads `qualifying_players` and hero rate fields. Exact raw response schema wasn't captured. |
-| Hero AFK insight | `GET /stats/leavers` | `mode` (`all` or `competitive`) | UI parser reads `leaves`, `games`, and hero rate fields. Exact raw response schema wasn't captured. |
+| Hero comm-ban insight | `GET /stats/commbans` | `mode` (`all` or `competitive`) | Object: `heroes`, `last_update`, `mode`, `overall_pct`; hero rows: `ci95`, `hero_id`, `pct`, `qualifying_players`, `vs_avg`, `weighted_banned`, `weighted_players`. |
+| Hero AFK insight | `GET /stats/leavers` | `mode` (`all` or `competitive`) | Object: `heroes`, `last_update`, `mode`, `overall_pct`; hero rows: `ci95`, `games`, `hero_id`, `leaves`, `leaves_per_player`, `pct`, `players`, `vs_avg`. |
 | Faction details | `GET /faction/{faction_id}` | Path parameter | Faction overview, public profile/member list, and results; nested schema varies. |
 | Match details | `POST /match` | `{"match_id": "..."}` | Object keys observed: `match_uid`, `replay_id`, `winner_camp`, `duration_seconds`, `map_id`, `game_mode_id`, `game_play_mode_id`, `platform`, `timestamp`, `draft`, `teams`; team player rows include combat stats and per-hero usage. |
 | Public profile card | `GET /profiles/{username}` | Username path parameter | Route observed in the profile frontend; complete response schema not captured. |
@@ -41,8 +41,9 @@ keys.
 
 The client exposes these read resources through `RivalsDataClient` and `Player`;
 see README examples and method docstrings. `DataModel.win_rate` returns an
-integer percentage when the response row has a direct win-rate field or both
-`wins` and `losses`. If the source provides neither, it returns `None`.
+integer percentage from a direct win-rate field, `wins`/`losses`, or the
+competitive profile row's `win_count`/`battle_count`. If the source provides
+none of these, it returns `None`.
 
 ## Observed UI and routes
 
@@ -78,7 +79,7 @@ unverified.
 
 Other open research items:
 
-- Capture response bodies and option values for each Insights mode/filter.
+- Capture response bodies for the remaining Insights mode/filter variants.
 - Verify the hero leaderboard query parameters and faction response shape from
   real visible links.
 - Determine whether match-history cursor pagination and the uncached route
