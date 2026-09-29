@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rivalsdata-api"
-version = "0.1.0"
-description = "Unofficial Python client for public RivalsData player profiles"
+version = "0.2.0"
+description = "Unofficial Python client for public RivalsData data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

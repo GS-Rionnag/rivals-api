@@ -32,13 +32,17 @@ dependencies from changing unrelated applications installed in system Python.
 ## Project map
 
 - `src/rivalsdata/client.py`: HTTP client, username resolution, UID lookup,
-  and the optional Camoufox retry.
+  shared GET/POST handling, and the optional Camoufox retry.
+- `src/rivalsdata/models.py`: mapping-compatible response models and the typed
+  `Player` wrapper.
+- `src/rivalsdata/resources.py`: lazy player and site-wide endpoint resources.
 - `src/rivalsdata/exceptions.py`: public exception types.
 - `src/rivalsdata/__init__.py`: package exports and version.
 - `pyproject.toml`: build backend, package metadata, runtime and optional
   dependencies.
-- `docs/PROJECT_CONTEXT.md`: endpoint observations and concise contributor
-  handoff notes.
+- `docs/API.md`: observed site sections, endpoint inventory, response samples,
+  and open questions.
+- `docs/PROJECT_CONTEXT.md`: contributor and new-chat handoff notes.
 
 ## How the client currently works
 
@@ -48,12 +52,15 @@ The client uses curl_cffi with browser TLS impersonation against
 - `POST /players/search` with JSON `{"name": "..."}` returns search
   suggestions. Search records include an `aid`, such as
   `11001_1970288503`; the final numeric segment is the profile UID.
-- `POST /player` with JSON `{"uid": 1970288503}` returns a player profile.
+- `POST /player` with JSON `{"uid": 1970288503}` returns a typed `Player`
+  object. Profile keys work as both mapping values and attributes.
+- Resource managers cover public leaderboard, hero, team-up, insight, faction,
+  match, and player-tab endpoints. See `docs/API.md` for the current inventory.
 - If these requests are blocked and `use_browser_fallback=True`, the client
   loads RivalsData in Camoufox and retries the POST from the page context.
 
 These are observed implementation details, not a supported RivalsData contract.
-Do not assume that `aid` formats or JSON fields are permanent.
+Do not assume that `aid` formats, filters, routes, or JSON fields are permanent.
 
 ## Contribution workflow
 

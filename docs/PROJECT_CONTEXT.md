@@ -1,84 +1,107 @@
-# Project context for new contributors and coding sessions
+# Project context for new chats and contributors
 
-## Objective
+## Goal and boundaries
 
-Build an unofficial, small Python package for reading public player profile
-data from rivalsdata.com. The first feature is player lookup by numeric UID or
-username. The public website is the source of truth for API behavior; its
-backend API is undocumented and may change.
+`rivalsdata-api` is an unofficial Python wrapper around public RivalsData pages
+and their undocumented JSON API. It should offer ergonomic, discord.py-like
+objects while retaining unknown JSON keys so the wrapper remains useful as the
+site evolves. It is not affiliated with RivalsData, NetEase, or Marvel.
 
-## Current package state
+Prefer read-only endpoints needed by public pages. Some frontend routes concern
+profile editing, favorites, account binding, and private profiles; the UI
+requests for these have not been fully characterized and should not be treated
+as public, stable methods. Keep requests respectful and conservative.
 
-- Distribution name: `rivalsdata-api`
-- Import name: `rivalsdata`
-- Version: `0.1.0`
-- Python: `>=3.10`
-- Build backend: Hatchling, with a src layout
-- Runtime dependency: curl_cffi
-- Optional browser fallback: Camoufox
-- Public client class: `RivalsDataClient`
+## Current package
 
-The user-facing setup and examples live in README.md. Contribution instructions
-live in CONTRIBUTING.md.
+- Distribution: `rivalsdata-api`; import: `rivalsdata`.
+- Version: `0.2.0` (update metadata deliberately before the next release).
+- Python `>=3.10`, Hatchling build, `src/` layout.
+- Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
+- Public entry point: `RivalsDataClient`.
+- GitHub: <https://github.com/GS-Rionnag/rivalsdata-api>.
 
-## Observed API behavior
+## Code map
 
-The site profile page used during implementation was
-`https://rivalsdata.com/player/1471250983`. Browser inspection exposed these
-requests:
+- `src/rivalsdata/client.py`: HTTP session, search, player lookup, HTTP errors,
+  TLS impersonation and optional Camoufox GET/POST fallback.
+- `src/rivalsdata/models.py`: tolerant mapping/attribute models, `Player`, and
+  integer win-rate convenience properties.
+- `src/rivalsdata/resources.py`: managers for player sections and global
+  leaderboards, heroes, team-ups, insights, factions, and matches.
+- `src/rivalsdata/exceptions.py`: public exception hierarchy.
+- `src/rivalsdata/__init__.py`: public exports/version.
+- `docs/API.md`: UI routes, observed endpoints, request arguments, sampled
+  response fields, and explicit uncertainties.
+- `CONTRIBUTING.md`: development and contribution workflow.
 
-1. `POST https://api.rivalsdata.com/players/search`
-   - JSON payload: `{"name": "GS-"}`
-   - Example result: `{"aid":"11001_1970288503", "name":"GS-", ...}`
-   - The last underscore-separated section of `aid` is a numeric UID.
-2. `POST https://api.rivalsdata.com/player`
-   - JSON payload: `{"uid": 1970288503}`
-   - Returns a profile dictionary with keys such as `uid`, `name`,
-     `level`, `faction`, `rank_game_season`, `status`, and `xp`.
+## Object interface
 
-Both endpoints were manually verified with curl_cffi Chrome impersonation.
-The package was also manually exercised through both UID and username flows.
-The optional Camoufox browser POST path was separately exercised successfully.
+`client.get_player(uid_or_name)` returns a mapping-compatible `Player`.
+Profile fields support `player.name`, `player.level`, and `player["level"]`.
+Nested JSON is recursively attribute-accessible. `player.raw` retains a shallow
+copy of the full response.
 
-The page loads additional endpoints for heroes, crosshairs, matches, and other
-profile sections. They are not part of the current public package API.
+Lazy subresources include `player.heroes.fetch(...)`, `player.matches.fetch(...)`,
+`player.teammates.fetch(...)`, `player.crosshairs.fetch()`,
+`player.proficiency.fetch()`, `player.punishments.fetch()`,
+`player.name_history.fetch()`, and `player.stats.heroes/maps/bans(...)`.
+Client-wide resources include `client.leaderboards`, `client.heroes`,
+`client.team_ups`, `client.insights`, `client.factions`, and `client.matches`.
+`client.profiles` and `client.favorites` have thin read methods; their response
+schemas are not yet verified.
+Rows offer `.win_rate` and `.winrate` integer-percent access when data supports
+it; all original data remains in mapping access.
 
-## Implementation notes
+## Observed API details
 
-- `resolve_player(name)` calls `/players/search`, prefers a
-  Unicode-normalized exact name match, and otherwise returns the first
-  suggestion. RivalsData search results may be ambiguous; preserve that behavior
-  unless there is a stronger observed signal for identifying the intended row.
-- `get_player(value)` treats digit-only inputs as UIDs; all other strings are
-  searched as usernames, then fetched from `/player`.
-- `get_player_by_uid(uid)` requires digits only.
-- Public errors are defined in `src/rivalsdata/exceptions.py`.
-- The client does not yet expose typed models, async support, retries, caching,
-  rate limiting, or separate hero/match APIs.
+The major UI areas inspected are home, player profile/tabs, global leaderboard,
+hero tier list and hero detail tabs, team-ups, insights, factions, and match
+detail pages. Main public request families are:
 
-## Maintaining a clean Python setup
+- `POST /players/search`, `POST /player`.
+- `POST /player/heroes`, `/crosshairs`, `/matches[/cached]`, `/teammates`,
+  `/proficiency`, `/stats/heroes`, `/stats/maps`, `/stats/bans`, `/punishments`,
+  `/name-history`.
+- `GET /leaderboards`, `/stats/tierlist`, `/stats/teamups`, `/stats/heroes/{id}`,
+  `/stats/meta/{id}`, `/stats/leaderboards`, `/stats/punishments`, `/stats/xp`,
+  `/stats/oaa`, `/stats/commbans`, `/stats/leavers`, and `/faction/{id}`.
+- `POST /match` with `{"match_id": "..."}`. Verified against a real match link
+  opened from the public GS- profile. The returned object contains replay id,
+  mode/map/time, draft picks/bans, both teams, players' combat stats, and hero
+  usage.
+- `GET /profiles/{username}` and `POST /favorites` are wrapped in generic
+  models. Their response contracts remain undocumented.
 
-Use a virtual environment in the repository and install only needed extras:
+The hero detail Counters and Synergy tabs showed “Coming Soon” on inspection.
+The Live Game tab did not expose data for the sampled player. Do not invent
+endpoints for these. Match history may be private; the public UI has a separate
+cached route. Match page and response samples are in `docs/API.md`.
 
-```console
-python -m venv .venv
-python -m pip install -e '.[dev]'
-```
+Frontend asset strings mention `/profiles`, profile edit, `/bind/start`, and
+`/bind/check`, but their full contract/auth behavior isn't verified. Edit/bind
+endpoints can change account state and are intentionally not implemented by
+this read-only package yet. `client.matches.get` uses the verified `match_id`
+payload.
 
-Add `[browser]` only to develop or use the Camoufox fallback. Do not pin or
-downgrade global packages to satisfy unrelated applications. The shared host
-Python has unrelated conflicts involving Pyppeteer, Selenium, Google GenAI,
-and Instructor; these are not dependencies of this package.
+The website currently shows Season 10 / season value 20 and OS `1` for PC on
+the inspected UI. Treat those as site values, not permanent constants.
 
-## Good next steps
+## Contributor workflow
 
-- Add mocked unit tests for UID validation, search result parsing, HTTP errors,
-  and Cloudflare fallback behavior.
-- Improve search disambiguation while matching the website's actual behavior.
-- Add additional profile-section methods only after capturing and documenting
-  their request and response contracts from the public UI.
-- Consider typed result models only after the response shape has stabilized.
+Before a change, read `CONTRIBUTING.md`, `docs/API.md`, and the relevant source.
+For a new endpoint, capture it from a visible UI action or a read-only browser
+request, record its method/path/parameters and sample response in `docs/API.md`,
+then implement it through the shared client request helpers. Favor a typed
+resource wrapper plus generic `DataModel` over brittle assumptions about every
+field. Keep models mapping-compatible.
 
-Keep this document current whenever the package's interface or observed
-upstream behavior changes. A new coding session should read this file,
-CONTRIBUTING.md, and the relevant source files before editing.
+Use a virtual environment. Install editable dependencies with
+`python -m pip install -e '.[dev]'`; use `'[browser,dev]'` only for browser
+fallback work. The global host Python has unrelated package conflicts; don't
+change global dependencies to resolve those.
+
+No automated test suite is currently tracked. Don't add network-dependent
+checks to routine development; use mocked tests when the project owner asks for
+tests. Ruff and wheel builds are available for code checks. Commit coherent
+milestones and push to `origin` when explicitly requested by the project owner.

@@ -7,12 +7,16 @@ from .exceptions import (
     RivalsDataError,
     RivalsDataHTTPError,
 )
+from .models import DataModel, Player, StatRecord
 
 __all__ = [
     "CloudflareError",
+    "DataModel",
+    "Player",
     "PlayerNotFoundError",
     "RivalsDataClient",
     "RivalsDataError",
     "RivalsDataHTTPError",
+    "StatRecord",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
