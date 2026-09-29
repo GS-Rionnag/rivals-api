@@ -56,11 +56,9 @@ python -m pip install 'rivalsdata-api[mcp]'
 The server exposes read-only tools for player search and profiles, a player's
 current live match (when they are in one), match history, player stats,
 leaderboards, heroes, team-ups, public insights, matches, and factions. The
-`show_player_dashboard` tool returns an MCP-UI player card with rank and
-competitive record plus one optional data section per call: current match
-roster, hero win-rate chart, or recent match form with K/D/A. This keeps each
-dashboard pull to the profile plus at most one additional endpoint. It supports
-local stdio for Claude Desktop
+`show_player_dashboard` tool also returns an MCP-UI player report with rank and
+competitive record, current match roster split by side, a hero win-rate chart,
+and recent match form with K/D/A. It supports local stdio for Claude Desktop
 and Streamable HTTP for remote MCP clients such as ChatGPT. Data comes from
 RivalsData's undocumented API and may change; profile match history can be
 private.
@@ -68,15 +66,12 @@ private.
 ### How the MCP UI works
 
 `show_player_dashboard` fetches current data, then returns an HTML UI resource
-alongside the tool result. It advertises the dashboard through
-`_meta.ui.resourceUri`, uses the `text/html;profile=mcp-app` resource MIME type,
-and includes `openai/outputTemplate` as a ChatGPT compatibility alias. A host
-with MCP Apps support can render it in a sandboxed panel; MCP-UI metadata keeps
-the preferred frame size for compatible hosts. Hosts without UI support can
-still use the regular MCP tools and their text/data responses. The dashboard
-is a snapshot from the time the tool runs; ask for it again to refresh.
-The `section` argument defaults to `live_match`; use `hero_form` or
-`recent_matches` in separate calls when you need those views.
+alongside the tool result. MCP-UI labels it with a `ui://` resource URI and
+preferred size. A compatible host can render that resource in a sandboxed
+panel; a host without UI support can still use the regular MCP tools and their
+text/data responses. ChatGPT uses MCP-UI's Apps SDK adapter, while Claude is
+listed as supporting MCP Apps directly. The dashboard is a snapshot from the
+time the tool runs; ask for it again to refresh.
 
 ### Claude Desktop (local)
 
