@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 from curl_cffi import requests
 
 from .exceptions import CloudflareError, PlayerNotFoundError, RivalsDataHTTPError
-from .models import Player
+from .models import Player, PlayerSearchResult
 from .resources import (
     Factions,
     Favorites,
@@ -33,6 +33,15 @@ class RivalsDataClient:
 
     base_url = "https://rivalsdata.com"
     api_url = "https://api.rivalsdata.com"
+
+    leaderboards: Leaderboards
+    heroes: HeroStats
+    team_ups: TeamUps
+    insights: Insights
+    factions: Factions
+    profiles: Profiles
+    favorites: Favorites
+    matches: Matches
 
     def __init__(
         self,
@@ -84,7 +93,7 @@ class RivalsDataClient:
             time.sleep(0.25 * (attempt + 1))
         return response
 
-    def resolve_player(self, username: str) -> dict[str, Any]:
+    def resolve_player(self, username: str) -> PlayerSearchResult:
         """Search by username; add numeric uid to the source result."""
         query = username.strip()
         if not query:
@@ -108,7 +117,7 @@ class RivalsDataClient:
             raise RivalsDataHTTPError(
                 "Search returned a player without a recognizable numeric UID"
             )
-        return {**player, "uid": uid}
+        return PlayerSearchResult({**player, "uid": uid})
 
     def get_player(self, uuid_or_username: str | int) -> Player:
         """Fetch a typed public profile by numeric UID or username.

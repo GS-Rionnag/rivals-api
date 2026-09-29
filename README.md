@@ -126,11 +126,31 @@ HTTPS gateway before exposing it publicly. For local development, bind to
 `127.0.0.1` instead. The `app` is the MCP SDK's Streamable HTTP ASGI
 application; Uvicorn manages its lifespan and session manager.
 
-`Player` and returned `DataModel` objects support both mapping access and
-attribute access (`player["level"]` or `player.level`). Nested dictionaries
-and arrays are wrapped recursively; `.raw` returns a shallow copy of a model's
-original JSON. For endpoints whose fields evolve, these generic typed wrappers
-preserve the complete payload.
+Every implemented response route now has named endpoint models and row models
+with annotations for fields observed in the API inventory. This includes
+`Player`, `Match`, `MatchHistory`, `MatchTeam`, `MatchPlayer`, `Character`,
+`ProficiencyResponse`, `LeaderboardResponse`, `PunishmentsPage`, `XPPage`,
+`Top500Response`, and typed teammate, crosshair, stats, faction, and insight
+records. For example, `rd.matches.get(match_id)` returns a `Match`,
+`player.matches.fetch()` returns a `MatchHistory`, and
+`player.proficiency.fetch()` returns a `ProficiencyResponse`. Nested match
+teams and participants are converted to `MatchTeam` and `MatchPlayer`; embedded
+character records use `Character`. Models support mapping access
+(`player["level"]`) and attribute access (`player.level`). Unknown upstream
+fields are still preserved and available through `.raw`; endpoint schemas
+that have not been observed completely are annotated only for known fields.
+
+```python
+with RivalsDataClient() as rd:
+    player = rd.get_player(1970288503)             # Player
+    proficiency = player.proficiency.fetch()       # ProficiencyResponse
+    account = next(iter(proficiency.accounts.values()))  # Proficiency
+    hero = account.hero_proficiency_infos["1011"]   # HeroProficiency
+    print(hero.proficiency_level, hero.proficiency_point)
+
+    tier_list = rd.heroes.tier_list()               # TierListResponse
+    print(tier_list.heroes[0].hero_id)             # Character
+```
 
 ## Public resources
 

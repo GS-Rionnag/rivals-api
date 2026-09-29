@@ -19,11 +19,16 @@ except ImportError as exc:  # pragma: no cover - depends on optional extra
         "`pip install 'rivalsdata-api[mcp]'`."
     ) from exc
 
+from mcp.types import (
+    CallToolResult,
+    EmbeddedResource,
+    TextContent,
+    TextResourceContents,
+)
+from mcp_ui_server import create_ui_resource
+
 from .client import RivalsDataClient
 from .hero_ids import hero_id, hero_name
-from mcp_ui_server import create_ui_resource
-from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourceContents
-
 
 mcp = FastMCP(
     "RivalsData",
@@ -242,7 +247,6 @@ def show_player_dashboard(
                 if isinstance(row, Mapping):
                     player_name = escape(str(row.get("name", "Unknown player")))
                     team_id = str(row.get("side", row.get("team_id", "Unknown side")))
-                    team = escape(team_id)
                     rank = escape(str(row.get("rank", "—")))
                     wins = escape(str(row.get("wins", "—")))
                     losses = escape(str(row.get("losses", "—")))

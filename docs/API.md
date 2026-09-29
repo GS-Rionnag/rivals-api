@@ -3,9 +3,11 @@
 This is an observed inventory of the public web client's API, gathered by
 reviewing the RivalsData UI and its browser requests on 2026-09-29. The upstream
 API is undocumented and can change. Field sets below are examples from live
-responses, not schemas guaranteed by RivalsData. Response bodies are returned
-as attribute-accessible `DataModel` / `StatRecord` objects, preserving unknown
-keys.
+responses, not schemas guaranteed by RivalsData. The client converts every
+implemented route to endpoint-specific model and row classes (such as `Match`,
+`Character`, `PlayerSummary`, `ProficiencyResponse`, and `PunishmentsPage`).
+Known fields are annotated; unknown keys remain accessible through `DataModel`
+and `.raw` so upstream additions are not discarded.
 
 ## Implemented public read endpoints
 
@@ -18,27 +20,27 @@ keys.
 | Player crosshairs | `POST /player/crosshairs` | `uid` | Array rows: `crosshair`, `uses`. |
 | Player match history | `POST /player/matches/cached` (or `/player/matches`) | `uid`, `cursor`, optional `season`; cached endpoint also accepts `mode`, `hero`, `teammate` | Cached response keys observed: `matches`, `next_cursor`, `source`; match rows include `assists`, `deaths`, `game_mode_id`, `game_play_mode_id`, `hero_id`, `is_mvp`, `is_svp`, `is_win`, `kills`, `map_id`, `match_uid`, `os`, `placement`, `platform`, `rank_level`, `rank_score`, `score_change`, `season`, `team_score`, `timestamp`, `winner_camp`. A sample profile marked its history private; a private profile can return no visible match rows. |
 | Player teammates | `POST /player/teammates` | `uid`, optional `season`, `mode` | Array rows: `games`, `icon`, `losses`, `name`, `teammate_uid`, `wins`. |
-| Player proficiency | `POST /player/proficiency` | `uid` | Object keyed by account id (sample: `11001_{uid}`); inner structure varies. |
-| Player hero stats | `POST /player/stats/heroes` | `uid`, optional `season` | Array rows: `competitive`, `hero_id`, `quickplay`, `rank`. |
-| Player map stats | `POST /player/stats/maps` | `uid`, optional `season` | Array shape varies; captured from the profile Stats tab. |
-| Player ban stats | `POST /player/stats/bans` | `uid`, optional `season` | Array shape varies; captured from the profile Stats tab. |
-| Player punishments | `POST /player/punishments` | `uid` | Object keys observed: `chat`, `login`, `rank`. |
+| Player proficiency | `POST /player/proficiency` | `uid` | Object keyed by account id (sample: `11001_{uid}`); each account has `hero_proficiency_infos` keyed by hero id, with `proficiency_level` and `proficiency_point`. |
+| Player hero stats | `POST /player/stats/heroes` | `uid`, optional `season` | Array rows: `competitive`, `hero_id`, `quickplay`, `rank`. Each mode includes games, wins/losses, KDA, MVP/SVP counts, accuracy, and `per_10`/`per_game` combat averages. |
+| Player map stats | `POST /player/stats/maps` | `uid`, optional `season` | Array rows: `map`, `competitive`, `quickplay`; each mode has games, wins, losses, winrate. |
+| Player ban stats | `POST /player/stats/bans` | `uid`, optional `season` | Array rows: `hero_id`, `matches`, `wins`, `losses`, `winrate`. |
+| Player punishments | `POST /player/punishments` | `uid` | Object keys: `chat`, `login`, `rank`; non-null entries include `expire`, `name`, `reason`, `time`, `uid`. |
 | Player name history | `POST /player/name-history` | `uid` | Array rows: `first_seen`, `name`. |
 | Global leaderboard | `GET /leaderboards` | `limit`, optional `skip`, `season`, `os` (Python `platform`) | Object keys observed: `count`, `players`, `updated_at`; row keys: `heroes`, `icon`, `losses`, `name`, `os`, `position`, `rank_level`, `rank_score`, `season`, `status`, `uid`, `wins`. |
-| Hero tier list | `GET /stats/tierlist` | `platform`, `rank` | Hero rows displayed with tier, win rate, pick rate, ban rate, and games; raw row keys preserved. |
-| Hero detail | `GET /stats/heroes/{hero_id}` | Path parameter | Hero aggregate object; full key set varies by hero and season. |
-| Hero trend/meta | `GET /stats/meta/{hero_id}` | `range` (30, 90, or 180 days) | Trend/analytics object; raw keys preserved. |
-| Hero leaderboard | `GET /stats/leaderboards` | `hero` plus caller-supplied query filters | Used by hero leaderboard pages. Parameter combinations and response fields are not fully verified. |
-| Team-up stats | `GET /stats/teamups` | `platform`, `rank`, optional `hero` | Team-up usage and win-rate rows; raw keys preserved. |
+| Hero tier list | `GET /stats/tierlist` | `platform`, `rank` | Object: `last_update`, `heroes`; rows include hero id, picks/bans, total games, winrate, pick rate, ban rate, and score. |
+| Hero detail | `GET /stats/heroes/{hero_id}` | Path parameter | Object: `hero`, `last_update`, `season`; `hero` contains aggregate per-10 stats and pick/ban rates. |
+| Hero trend/meta | `GET /stats/meta/{hero_id}` | `range` as `30d`, `90d`, or `180d` | Object: `hero_id`, `last_update`, `points`, `range`, `window_days`; point rows include timestamp, games, pick/ban rates, and winrate without mirror matches. |
+| Hero leaderboard | `GET /stats/leaderboards` | `hero` plus caller-supplied query filters | Object: `last_update`, `players`; rows include combat averages, placement, score, rank, and wins/losses. |
+| Team-up stats | `GET /stats/teamups` | `platform`, `rank`, optional `hero` | Object: `last_update`, `heroes`, where `heroes` maps hero ids to slot ids and rows with `bond_id`, `games`, `nm_winrate`, `pickrate`, `winrate`. |
 | Punishments log | `GET /stats/punishments` | `kind`, optional `cursor` | Object: `last_update`, `next`, `results`; sample row keys: `expires_at`, `icon`, `issued_at`, `kind`, `name`, `peak_rank_level`, `peak_rank_score`, `rank`, `reason`, `uid`. |
 | XP leaderboard | `GET /stats/xp` | Optional `cursor` | Object: `last_update`, `next`, `results`; sample row keys: `icon`, `name`, `rank`, `uid`, `xp`. |
 | Top 500 finishes | `GET /stats/oaa` | `os` (Python `platform`) | Object: `count`, `last_update`, `os`, `players`; sample row keys: `avg_placement`, `avg_score`, `finishes`, `icon`, `name`, `seasons`, `uid`. |
 | Hero comm-ban insight | `GET /stats/commbans` | `mode` (`all` or `competitive`) | Object: `heroes`, `last_update`, `mode`, `overall_pct`; hero rows: `ci95`, `hero_id`, `pct`, `qualifying_players`, `vs_avg`, `weighted_banned`, `weighted_players`. |
 | Hero AFK insight | `GET /stats/leavers` | `mode` (`all` or `competitive`) | Object: `heroes`, `last_update`, `mode`, `overall_pct`; hero rows: `ci95`, `games`, `hero_id`, `leaves`, `leaves_per_player`, `pct`, `players`, `vs_avg`. |
-| Faction details | `GET /faction/{faction_id}` | Path parameter | Faction overview, public profile/member list, and results; nested schema varies. |
+| Faction details | `GET /faction/{faction_id}` | Path parameter | Faction `captain`, `description`, `members`, `name`, `region`, `results`, `tag`, `type`; member records contain account id, config/rank, game status, and name. |
 | Match details | `POST /match` | `{"match_id": "..."}` | Object keys observed: `match_uid`, `replay_id`, `winner_camp`, `duration_seconds`, `map_id`, `game_mode_id`, `game_play_mode_id`, `platform`, `timestamp`, `draft`, `teams`; team player rows include combat stats and per-hero usage. |
-| Public profile card | `GET /profiles/{username}` | Username path parameter | Route observed in the profile frontend; complete response schema not captured. |
-| Favorites lookup | `POST /favorites` | `{"uids": [uid, ...]}` | Request observed in frontend assets; response schema not captured. |
+| Public profile card | `GET /profiles/{uid}` | Numeric UID path parameter; `Profiles.get` resolves usernames | Object: `leaderboard_social`, `socials`, `uid`, `updated_at`. |
+| Favorites lookup | `POST /favorites` | `{"uids": [numeric_uid, ...]}` | Array of public player summaries with `aid`, `config_server`, `games`, `name`, and `status`. |
 
 The client exposes these read resources through `RivalsDataClient` and `Player`;
 see README examples and method docstrings. `DataModel.win_rate` returns an

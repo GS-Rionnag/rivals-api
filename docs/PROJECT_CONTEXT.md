@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `0.2.0` (update metadata deliberately before the next release).
+- Version: `1.1.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
@@ -48,8 +48,9 @@ Lazy subresources include `player.heroes.fetch(...)`, `player.matches.fetch(...)
 `player.name_history.fetch()`, and `player.stats.heroes/maps/bans(...)`.
 Client-wide resources include `client.leaderboards`, `client.heroes`,
 `client.team_ups`, `client.insights`, `client.factions`, and `client.matches`.
-`client.profiles` and `client.favorites` have thin read methods; their response
-schemas are not yet verified.
+`client.profiles` and `client.favorites` have typed read methods. The profile
+endpoint takes a numeric UID; the wrapper can resolve a username first.
+Favorites requires numeric UIDs and returns player summary rows.
 Rows offer `.win_rate` and `.winrate` integer-percent access when data supports
 it; all original data remains in mapping access.
 
@@ -70,8 +71,8 @@ detail pages. Main public request families are:
   opened from the public GS- profile. The returned object contains replay id,
   mode/map/time, draft picks/bans, both teams, players' combat stats, and hero
   usage.
-- `GET /profiles/{username}` and `POST /favorites` are wrapped in generic
-  models. Their response contracts remain undocumented.
+- `GET /profiles/{uid}` returns profile social metadata and `POST /favorites`
+  returns public player summaries. Both were checked through the browser.
 
 The hero detail Counters and Synergy tabs showed “Coming Soon” on inspection.
 The Live Game tab did not expose data for the sampled player. Do not invent
@@ -84,7 +85,8 @@ endpoints can change account state and are intentionally not implemented by
 this read-only package yet. `client.matches.get` uses the verified `match_id`
 payload.
 
-The website currently shows Season 10 / season value 20 and OS `1` for PC on
+The hero meta endpoint requires `range=30d`, `90d`, or `180d`; bare integers
+are rejected. The website currently shows Season 10 / season value 20 and OS `1` for PC on
 the inspected UI. Treat those as site values, not permanent constants.
 
 ## Contributor workflow
