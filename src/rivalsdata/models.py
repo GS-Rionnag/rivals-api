@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import Any
 
+from .hero_ids import hero_name
+
 
 def _wrap(value: Any) -> Any:
     if isinstance(value, dict):
@@ -33,6 +35,16 @@ class DataModel(Mapping[str, Any]):
         return dict(self._data)
 
     @property
+    def hero_name(self) -> str | None:
+        """Resolve this row's ``hero_id`` when it is a known hero."""
+        return hero_name(self._data.get("hero_id"))
+
+    @property
+    def top_hero_name(self) -> str | None:
+        """Resolve this row's ``top_hero_id`` when it is a known hero."""
+        return hero_name(self._data.get("top_hero_id"))
+
+    @property
     def win_rate(self) -> int | None:
         """Return an integer percentage when this object exposes win/loss data."""
         for key in ("win_rate", "winrate", "winRate"):
@@ -57,6 +69,14 @@ class DataModel(Mapping[str, Any]):
             return None
 
     def __getitem__(self, key: str) -> Any:
+        if key == "hero_name" and key not in self._data:
+            value = self.hero_name
+            if value is not None:
+                return value
+        if key == "top_hero_name" and key not in self._data:
+            value = self.top_hero_name
+            if value is not None:
+                return value
         return _wrap(self._data[key])
 
     def __iter__(self) -> Iterator[str]:
@@ -68,6 +88,10 @@ class DataModel(Mapping[str, Any]):
     def __getattr__(self, name: str) -> Any:
         if name == "winrate":
             return self.win_rate
+        if name == "hero_name":
+            return self.hero_name
+        if name == "top_hero_name":
+            return self.top_hero_name
         try:
             return _wrap(self._data[name])
         except KeyError as exc:

@@ -20,7 +20,10 @@ by `python -m camoufox fetch`.
 ## Quick start
 
 ```python
-from rivalsdata import RivalsDataClient
+from rivalsdata import RivalsDataClient, hero_id, hero_name
+
+print(hero_name(1016))  # Loki
+print(hero_id("Loki"))  # 1016
 
 with RivalsDataClient() as rd:
     player = rd.get_player("GS-")  # numeric UID works too
@@ -64,6 +67,12 @@ local stdio for Claude Desktop
 and Streamable HTTP for remote MCP clients such as ChatGPT. Data comes from
 RivalsData's undocumented API and may change; profile match history can be
 private.
+
+Known `hero_id` and `top_hero_id` fields in MCP results include corresponding
+`hero_name` and `top_hero_name` fields. The `resolve_hero` tool accepts either
+a hero name or numeric ID. The pip package also exports `hero_name(id)` and
+`hero_id(name)`; returned `DataModel` rows provide `.hero_name` and
+`.top_hero_name` conveniences without changing their original `.raw` payload.
 
 ### How the MCP UI works
 

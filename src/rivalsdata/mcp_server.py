@@ -20,6 +20,7 @@ except ImportError as exc:  # pragma: no cover - depends on optional extra
     ) from exc
 
 from .client import RivalsDataClient
+from .hero_ids import hero_id, hero_name
 from mcp_ui_server import create_ui_resource
 from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourceContents
 
@@ -77,7 +78,13 @@ def player_dashboard_app() -> str:
 def _plain(value: Any) -> Any:
     """Convert package mapping models into JSON-serializable MCP results."""
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        result = {str(key): _plain(item) for key, item in value.items()}
+        for id_key, name_key in (("hero_id", "hero_name"), ("top_hero_id", "top_hero_name")):
+            if id_key in result and name_key not in result:
+                name = hero_name(result[id_key])
+                if name:
+                    result[name_key] = name
+        return result
     if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
     return value
@@ -174,7 +181,8 @@ def show_player_dashboard(
             games = int(row.get("games", wins + losses) or 0)
             total = wins + losses
             win_rate = round(wins * 100 / total) if total else 0
-            hero = escape(str(row.get("hero_id", "Unknown hero")))
+            hero_id_value = row.get("hero_id", "Unknown hero")
+            hero = escape(str(row.get("hero_name") or hero_name(hero_id_value) or hero_id_value))
             chart_rows.append(
                 f'<div class="hero-row"><div class="hero-label"><span>{hero}</span>'
                 f'<b>{win_rate}%</b></div><div class="track"><i style="width:{win_rate}%"></i>'
@@ -241,7 +249,9 @@ def show_player_dashboard(
                     top_heroes = row.get("top_heroes", [])
                     hero_label = ""
                     if isinstance(top_heroes, list) and top_heroes:
-                        hero_label = escape(", ".join(str(hero) for hero in top_heroes[:2]))
+                        hero_label = escape(", ".join(
+                            hero_name(hero) or str(hero) for hero in top_heroes[:2]
+                        ))
                     detail = f"Rank {rank} · {wins}W/{losses}L"
                     if hero_label:
                         detail += f" · {hero_label}"
@@ -437,6 +447,15 @@ def get_hero_tier_list(platform: int = 1, rank: str = "grandmaster_plus") -> Any
 def get_hero_stats(hero_id: str) -> Any:
     """Get aggregate statistics for a hero ID."""
     return _call(lambda client, value: client.heroes.get(value), hero_id)
+
+
+@mcp.tool()
+def resolve_hero(hero: str) -> dict[str, Any]:
+    """Resolve a Marvel Rivals hero name or ID to both canonical name and ID."""
+    identifier = int(hero) if hero.isdecimal() else hero_id(hero)
+    if identifier is None:
+        raise ValueError(f"Unknown hero name or ID: {hero}")
+    return {"hero_id": identifier, "hero_name": hero_name(identifier)}
 
 
 @mcp.tool()
