@@ -7,10 +7,13 @@ from .exceptions import (
     RivalsDataError,
     RivalsDataHTTPError,
 )
-from .hero_ids import HERO_NAMES, hero_id, hero_name
+from .hero_ids import HERO_CLASSES, HERO_NAMES, hero_class, hero_id, hero_name
 from .models import (
     BanRecord,
     Character,
+    ClassModeStats,
+    ClassStatsRecord,
+    ClassStatsResponse,
     CombatAverages,
     CommBanHero,
     CommBanInsights,
@@ -74,9 +77,13 @@ from .models import (
 )
 
 __all__ = [
+    "HERO_CLASSES",
     "HERO_NAMES",
     "BanRecord",
     "Character",
+    "ClassModeStats",
+    "ClassStatsRecord",
+    "ClassStatsResponse",
     "CloudflareError",
     "CombatAverages",
     "CommBanHero",
@@ -142,7 +149,8 @@ __all__ = [
     "Top500Season",
     "XPPage",
     "XPRecord",
+    "hero_class",
     "hero_id",
     "hero_name",
 ]
-__version__ = "1.1.0"
+__version__ = "1.2.0"

@@ -6,9 +6,11 @@ from collections.abc import Mapping
 from typing import Any, Literal
 from urllib.parse import quote
 
+from .hero_ids import hero_class
 from .models import (
     BanRecord,
     Character,
+    ClassStatsResponse,
     CommBanInsights,
     CrosshairRecord,
     DataModel,
@@ -206,6 +208,58 @@ class PlayerStats(PlayerResource):
     def heroes(self, *, season: int | None = None) -> list[HeroStatsRecord]:
         payload = {"season": season} if season is not None else {}
         return _many(self._post("/player/stats/heroes", **payload), HeroStatsRecord)
+
+    def classes(self, *, season: int | None = None) -> ClassStatsResponse:
+        """Sum hero records by tank/support/dps, separately for each mode.
+
+        Win rate uses total wins / (wins + losses), not the average of hero
+        percentages. Counts describe hero participation: switching heroes can
+        cause one match to contribute to multiple hero or class records.
+        Unknown roles and incomplete win/loss rows are listed in ``excluded``.
+        """
+        groups = {
+            name: {"player_class": name, "role": role, "hero_ids": [],
+                   "competitive": [], "quickplay": []}
+            for name, role in (("tank", "Vanguard"), ("support", "Strategist"),
+                               ("dps", "Duelist"))
+        }
+        excluded = []
+        for hero in self.heroes(season=season):
+            identifier = hero.get("hero_id")
+            name = hero_class(identifier)
+            if name is None:
+                excluded.append({"hero_id": identifier, "reason": "unknown_class"})
+                continue
+            group = groups[name]
+            group["hero_ids"].append(identifier)
+            for mode in ("competitive", "quickplay"):
+                row = hero.get(mode)
+                if row is None:
+                    continue
+                counts = [row.get(key) for key in ("wins", "losses")]
+                if any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                       or value < 0 for value in counts):
+                    excluded.append({"hero_id": identifier, "mode": mode,
+                                     "reason": "missing_or_invalid_win_loss_counts"})
+                    continue
+                group[mode].append(row)
+        for group in groups.values():
+            for mode in ("competitive", "quickplay"):
+                rows = group[mode]
+                totals = {key: sum(row[key] for row in rows)
+                          for key in ("wins", "losses")}
+                totals["games"] = sum(
+                    row.get("games") if isinstance(row.get("games"), (int, float))
+                    else row["wins"] + row["losses"] for row in rows
+                )
+                for key in ("mvps", "svps"):
+                    if rows and all(isinstance(row.get(key), (int, float))
+                                    for row in rows):
+                        totals[key] = sum(row[key] for row in rows)
+                total = totals["wins"] + totals["losses"]
+                totals["win_rate"] = round(totals["wins"] * 100 / total) if total else None
+                group[mode] = totals
+        return ClassStatsResponse({"classes": list(groups.values()), "excluded": excluded})
 
     def maps(self, *, season: int | None = None) -> list[MapRecord]:
         payload = {"season": season} if season is not None else {}

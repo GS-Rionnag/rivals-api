@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `1.1.0`.
+- Version: `1.2.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
@@ -45,7 +45,7 @@ copy of the full response.
 Lazy subresources include `player.heroes.fetch(...)`, `player.matches.fetch(...)`,
 `player.teammates.fetch(...)`, `player.crosshairs.fetch()`,
 `player.proficiency.fetch()`, `player.punishments.fetch()`,
-`player.name_history.fetch()`, and `player.stats.heroes/maps/bans(...)`.
+`player.name_history.fetch()`, and `player.stats.heroes/maps/bans/classes(...)`.
 Client-wide resources include `client.leaderboards`, `client.heroes`,
 `client.team_ups`, `client.insights`, `client.factions`, and `client.matches`.
 `client.profiles` and `client.favorites` have typed read methods. The profile
@@ -53,6 +53,21 @@ endpoint takes a numeric UID; the wrapper can resolve a username first.
 Favorites requires numeric UIDs and returns player summary rows.
 Rows offer `.win_rate` and `.winrate` integer-percent access when data supports
 it; all original data remains in mapping access.
+
+`player.stats.classes(season=...)` groups observed hero IDs into tank, support,
+and DPS. It sums games, wins, losses, and available MVP/SVP counts separately
+for competitive and quickplay, with win rates calculated from summed wins and
+losses. The response has typed `classes` rows and an `excluded` list for unknown
+roles or incomplete win/loss data. MCP exposes it through `get_player_stats`
+with `category="classes"`. Hero switching means totals count participation,
+not unique matches. Role IDs and the corrected Angela/Daredevil IDs were
+verified against RivalsData's roster on 2026-09-30; Deadpool has separate role
+variants (10571/10572/10573), while generic 1057 remains unclassified.
+
+Camoufox inspection found no cumulative hero hours in current-season or
+all-seasons player stats. Match hero usage does include `play_time` in seconds.
+See `docs/API.md` for the recorded investigation; no playtime aggregation
+method was added.
 
 ## Observed API details
 
@@ -103,7 +118,7 @@ Use a virtual environment. Install editable dependencies with
 fallback work. The global host Python has unrelated package conflicts; don't
 change global dependencies to resolve those.
 
-No automated test suite is currently tracked. Don't add network-dependent
-checks to routine development; use mocked tests when the project owner asks for
-tests. Ruff and wheel builds are available for code checks. Commit coherent
+Mocked tests in `tests/` cover hero lookups, typed responses, and calculated
+class stats. Keep network-dependent checks opt-in. Run pytest, Ruff, and package
+builds for code checks. Commit coherent
 milestones and push to `origin` when explicitly requested by the project owner.

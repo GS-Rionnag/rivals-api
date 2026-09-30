@@ -49,6 +49,37 @@ with RivalsDataClient() as rd:
 print(hero_season[0].win_rate)  # integer percent when wins/losses are present
 ```
 
+Calculated player class statistics are available through
+`player.stats.classes(season=20)` and the MCP `get_player_stats` tool with
+`category="classes"`. Each row contains `player_class` (`tank`, `support`,
+`dps`), the official role, hero IDs, and separate `competitive` and `quickplay`
+totals for games, wins, losses, and available MVP/SVP counts.
+
+```python
+with RivalsDataClient() as rd:
+    stats = rd.get_player("GS-").stats.classes(season=20)
+    for row in stats.classes:
+        print(row.player_class, row.competitive.win_rate)
+    print(stats.excluded)  # Unknown roles or incomplete win/loss records
+```
+
+Win rates are `total wins / (total wins + total losses)`, rounded to an integer
+percent. They are weighted by hero records, rather than averaging hero win
+rates. Switching heroes can make one match contribute to multiple records;
+these totals describe hero participation, not distinct matches. Empty modes
+have a `None` win rate. Role mappings were observed on RivalsData on
+2026-09-30, including Deadpool's separate role IDs; generic Deadpool and unknown
+IDs are excluded rather than assigned a guessed class.
+
+Character playtime was checked with Camoufox on 2026-09-30. Player hero stats
+did not expose cumulative hours, including in All Seasons. Match details do
+provide seconds in `match.teams[].players[].heroes[].play_time`; the site shows
+these as minutes and seconds when hovering a hero portrait. Sum the relevant
+player's entries across distinct retrieved matches and divide by 3600 to get
+character hours for those matches. Incomplete history prevents treating this as
+a lifetime total. See [the playtime investigation](docs/API.md#character-playtime-investigation-2026-09-30)
+for the observed fields and example.
+
 ## MCP server (ChatGPT and Claude)
 
 Install the MCP extra and the package:

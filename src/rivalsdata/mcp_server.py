@@ -410,10 +410,14 @@ def get_player_matches(
 def get_player_stats(
     uid_or_name: str, category: str = "heroes", season: int | None = None
 ) -> Any:
-    """Get player stats; category must be heroes, maps, or bans."""
-    methods = {"heroes": "heroes", "maps": "maps", "bans": "bans"}
+    """Get player stats: heroes, maps, bans, or calculated classes.
+
+    Classes sum hero wins/losses by tank/support/dps and game mode; these are
+    hero participation totals, which can count a match more than once.
+    """
+    methods = {"heroes": "heroes", "maps": "maps", "bans": "bans", "classes": "classes"}
     if category not in methods:
-        raise ValueError("category must be one of: heroes, maps, bans")
+        raise ValueError("category must be one of: heroes, maps, bans, classes")
     def fetch(client: RivalsDataClient, value: str, category: str,
               season: int | None) -> Any:
         return getattr(client.get_player(value).stats, methods[category])(season=season)

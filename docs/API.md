@@ -50,6 +50,41 @@ none of these, it returns `None`.
 
 ## Observed UI and routes
 
+`player.stats.classes(season=...)` derives tank (Vanguard), support (Strategist),
+and DPS (Duelist) totals from `/player/stats/heroes`; it does not call a class
+endpoint. It sums games/wins/losses separately for competitive and quickplay,
+and MVP/SVP counts when every included row supplies them. Win rate is calculated
+from summed wins and losses. Unknown classes and incomplete win/loss rows appear
+in `excluded`. Hero switching can count a single match in multiple hero records,
+so class totals are participation counts rather than distinct matches.
+
+The roster at `/stats` on 2026-09-30 identifies Deadpool variants as 10571
+(tank), 10572 (DPS), and 10573 (support), Daredevil as 1055, and Angela as 1056.
+
+### Character playtime investigation (2026-09-30)
+
+Using Camoufox (the package's optional browser dependency), the public GS-
+profile (`1970288503`) was inspected in Stats > Heroes for the current season
+and All Seasons. Expanded hero cards showed games, wins/losses, win rate, KDA,
+accuracy, MVP/SVP counts, combat averages, and team-ups. Neither the UI nor the
+captured `/player/heroes` and `/player/stats/heroes` responses supplied cumulative
+hero playtime. The all-seasons stats request returned 49 hero rows, including
+Deadpool's distinct role variants.
+
+Match details do expose per-character time in seconds at
+`teams[].players[].heroes[].play_time`. For match
+`5518155_1790655030_1272083_11001_11`, the match duration was 584 seconds and GS-'s
+Loki entry contained `play_time=583.8668914120644`. Hovering the hero portrait
+displayed `Loki` and `9:43`. The observed frontend formatter takes
+`floor(play_time / 60)` minutes and `floor(play_time % 60)` seconds.
+
+Hours for a character over a supplied set of matches can be calculated by
+summing that player's matching hero entries and dividing by 3600. Include all
+matching entries (a hero can have multiple usage segments), and deduplicate
+match IDs. This produces time for the retrieved matches, not a guaranteed
+lifetime or season total: history and detail availability may be incomplete.
+No automatic bulk match fetch was added as part of class statistics.
+
 | UI route | What the UI exposes |
 | --- | --- |
 | `/` | Search, top leaderboard, favorites, top heroes, and top team-ups. |

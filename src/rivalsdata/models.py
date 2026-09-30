@@ -399,6 +399,47 @@ class HeroStatsRecord(Character):
                 self._data[key] = HeroModeStats(self._data[key])
 
 
+class ClassModeStats(HeroModeStats):
+    """Calculated mode totals whose win rate is always a percentage."""
+
+    @property
+    def win_rate(self) -> int | None:
+        # Upstream win-rate fields can be fractions or percentages. Derived
+        # rates use counts so that a calculated 1% is not interpreted as 100%.
+        wins, losses = self._data["wins"], self._data["losses"]
+        total = wins + losses
+        return round(wins * 100 / total) if total else None
+
+
+class ClassStatsRecord(DataModel):
+    """Calculated hero participation totals for one player class."""
+
+    player_class: str
+    role: str
+    hero_ids: list[int | str]
+    competitive: ClassModeStats
+    quickplay: ClassModeStats
+
+    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+        super().__init__(data, **values)
+        for key in ("competitive", "quickplay"):
+            if isinstance(self._data.get(key), Mapping):
+                self._data[key] = ClassModeStats(self._data[key])
+
+
+class ClassStatsResponse(DataModel):
+    """Derived class totals and hero/mode rows excluded from calculation."""
+
+    classes: list[ClassStatsRecord]
+    excluded: list[DataModel]
+
+    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+        super().__init__(data, **values)
+        self._data["classes"] = [
+            ClassStatsRecord(row) for row in self._data.get("classes", [])
+        ]
+
+
 class HeroDetail(DataModel):
     hero: Character | None
     stats: Character | None
