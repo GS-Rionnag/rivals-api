@@ -65,8 +65,14 @@ omitting the season keeps the endpoint default. `player.stats.heroes` and MCP
 `get_player_stats` support the same selector. The method also sums
 MVP/SVP counts when every included row supplies them. Win rate is calculated
 from summed wins and losses. Unknown classes and incomplete win/loss rows appear
-in `excluded`. Hero switching can count a single match in multiple hero records,
-so class totals are participation counts rather than distinct matches.
+in `excluded`. The response includes `metadata` with `source`, `counts_basis`,
+`win_rate_formula`, `unique_matches_verified`, `hero_switch_attribution`,
+`season`, `season_scope`, and `warnings`. Numeric seasons have scope `season`,
+`"all"` and `-1` normalize to season/scope `"all"`, and an omitted season has
+scope `endpoint_default` with season `None`. Hero-switch attribution is unknown,
+so summed hero records cannot establish unique match counts or a player's
+overall match win rate. Complete lifetime coverage for all-seasons data is
+unverified. Warnings flag those limitations and any excluded records.
 
 The roster at `/stats` on 2026-09-30 identifies Deadpool variants as 10571
 (tank), 10572 (DPS), and 10573 (support), Daredevil as 1055, and Angela as 1056.

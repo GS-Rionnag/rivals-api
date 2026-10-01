@@ -69,8 +69,12 @@ It sums games, wins, losses, and available MVP/SVP counts separately
 for competitive and quickplay, with win rates calculated from summed wins and
 losses. The response has typed `classes` rows and an `excluded` list for unknown
 roles or incomplete win/loss data. MCP exposes it through `get_player_stats`
-with `category="classes"`. Hero switching means totals count participation,
-not unique matches. Role IDs and the corrected Angela/Daredevil IDs were
+with `category="classes"`. Response `metadata` describes the source, formula,
+season scope, and limitations. Upstream hero-switch attribution and distinct
+match counts are unverified; do not derive player overall win rate from class
+totals. All-seasons coverage is limited to returned records, with complete
+lifetime coverage unverified. Excluded rows produce a metadata warning.
+Role IDs and the corrected Angela/Daredevil IDs were
 verified against RivalsData's roster on 2026-09-30; Deadpool has separate role
 variants (10571/10572/10573), while generic 1057 remains unclassified.
 

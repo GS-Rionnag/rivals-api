@@ -225,8 +225,10 @@ class PlayerStats(PlayerResource):
         Supply a season ID or ``season="all"`` for combined all-seasons totals.
         Omitting ``season`` preserves the endpoint default.
         Win rate uses total wins / (wins + losses), not the average of hero
-        percentages. Counts describe hero participation: switching heroes can
-        cause one match to contribute to multiple hero or class records.
+        percentages. Counts are summed upstream hero records. The upstream
+        attribution rule for hero switches is unknown, so distinct match
+        counts cannot be established from these rows. ``metadata`` describes
+        the calculation and requested season scope.
         Unknown roles and incomplete win/loss rows are listed in ``excluded``.
         """
         groups = {
@@ -271,7 +273,34 @@ class PlayerStats(PlayerResource):
                 total = totals["wins"] + totals["losses"]
                 totals["win_rate"] = round(totals["wins"] * 100 / total) if total else None
                 group[mode] = totals
-        return ClassStatsResponse({"classes": list(groups.values()), "excluded": excluded})
+        all_seasons = season in ("all", -1)
+        warnings = [
+            "Hero records may overlap within a match. Class totals must not "
+            "be used to calculate the player's overall match win rate."
+        ]
+        if all_seasons:
+            warnings.append(
+                "All-seasons results cover the records returned by the source; "
+                "complete lifetime coverage is not verified."
+            )
+        if excluded:
+            warnings.append(
+                "Some hero or mode records were excluded; see excluded for details."
+            )
+        metadata = {
+            "source": "/player/stats/heroes",
+            "counts_basis": "summed_hero_records",
+            "win_rate_formula": "wins / (wins + losses) * 100",
+            "unique_matches_verified": False,
+            "hero_switch_attribution": "unknown",
+            "season": "all" if all_seasons else season,
+            "season_scope": "all" if all_seasons else (
+                "endpoint_default" if season is None else "season"
+            ),
+            "warnings": warnings,
+        }
+        return ClassStatsResponse({"classes": list(groups.values()), "excluded": excluded,
+                                   "metadata": metadata})
 
     def maps(self, *, season: int | None = None) -> list[MapRecord]:
         payload = {"season": season} if season is not None else {}

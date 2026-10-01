@@ -428,10 +428,11 @@ class ClassStatsRecord(DataModel):
 
 
 class ClassStatsResponse(DataModel):
-    """Derived class totals and hero/mode rows excluded from calculation."""
+    """Derived class totals, excluded rows, and calculation metadata."""
 
     classes: list[ClassStatsRecord]
     excluded: list[DataModel]
+    metadata: DataModel
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)

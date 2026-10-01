@@ -80,8 +80,12 @@ the same class response structure.
 
 Win rates are `total wins / (total wins + total losses)`, rounded to an integer
 percent. They are weighted by hero records, rather than averaging hero win
-rates. Switching heroes can make one match contribute to multiple records;
-these totals describe hero participation, not distinct matches. Empty modes
+rates. The response's `metadata` identifies the source, formula, and requested
+season scope. Upstream hero-switch attribution is unknown; hero records may
+overlap within a match, so these totals cannot establish distinct match counts
+or the player's overall match win rate. All-seasons coverage is limited to
+records returned by the source; complete lifetime coverage is unverified.
+Excluded rows also produce a metadata warning. Empty modes
 have a `None` win rate. Role mappings were observed on RivalsData on
 2026-09-30, including Deadpool's separate role IDs; generic Deadpool and unknown
 IDs are excluded rather than assigned a guessed class.

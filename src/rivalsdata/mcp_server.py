@@ -419,7 +419,9 @@ def get_player_stats(
     """Get player stats: heroes, maps, bans, or calculated classes.
 
     Classes sum hero wins/losses by tank/support/dps and game mode; these are
-    hero participation totals, which can count a match more than once.
+    summed hero records, which may overlap within a match. The response metadata
+    explains the calculation and scope; class totals cannot establish a player's
+    overall match win rate. Upstream hero-switch attribution is unknown.
     Supply a season ID or "all" for combined all-seasons totals. Omitting the
     season uses the endpoint default.
     """
