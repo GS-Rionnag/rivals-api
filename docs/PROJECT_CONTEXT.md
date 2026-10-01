@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `1.2.0`.
+- Version: `1.2.1`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
@@ -55,7 +55,11 @@ Rows offer `.win_rate` and `.winrate` integer-percent access when data supports
 it; all original data remains in mapping access.
 
 `player.stats.classes(season=...)` groups observed hero IDs into tank, support,
-and DPS. It sums games, wins, losses, and available MVP/SVP counts separately
+and DPS. Supply a numeric season ID for one season or `season="all"` for
+combined all-seasons stats; the latter sends `season=-1` to the upstream API.
+The detailed `player.stats.heroes` method and MCP stats tool accept the same
+selector. Omitting the season keeps the endpoint default.
+It sums games, wins, losses, and available MVP/SVP counts separately
 for competitive and quickplay, with win rates calculated from summed wins and
 losses. The response has typed `classes` rows and an `excluded` list for unknown
 roles or incomplete win/loss data. MCP exposes it through `get_player_stats`

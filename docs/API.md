@@ -53,7 +53,11 @@ none of these, it returns `None`.
 `player.stats.classes(season=...)` derives tank (Vanguard), support (Strategist),
 and DPS (Duelist) totals from `/player/stats/heroes`; it does not call a class
 endpoint. It sums games/wins/losses separately for competitive and quickplay,
-and MVP/SVP counts when every included row supplies them. Win rate is calculated
+accepting a numeric season ID or `season="all"` (sent to the API as `-1`). The
+all-seasons selection combines the returned hero records across seasons;
+omitting the season keeps the endpoint default. `player.stats.heroes` and MCP
+`get_player_stats` support the same selector. The method also sums
+MVP/SVP counts when every included row supplies them. Win rate is calculated
 from summed wins and losses. Unknown classes and incomplete win/loss rows appear
 in `excluded`. Hero switching can count a single match in multiple hero records,
 so class totals are participation counts rather than distinct matches.

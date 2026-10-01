@@ -1,3 +1,5 @@
+import pytest
+
 from rivalsdata import (
     ClassModeStats,
     ClassStatsRecord,
@@ -55,3 +57,46 @@ def test_one_percent_is_not_treated_as_a_fraction():
     row = ClassModeStats({"wins": 1, "losses": 99, "win_rate": 1})
     assert row.win_rate == 1
     assert row.winrate == 1
+
+
+class SeasonClient:
+    def _post_json(self, path, payload):
+        self.request = path, payload
+        wins = {None: 2, 20: 3, -1: 12}[payload.get("season")]
+        return [{"hero_id": 1016, "competitive": {"wins": wins, "losses": 1}}]
+
+
+@pytest.mark.parametrize("season,payload,wins", [
+    (None, {"uid": 123}, 2),
+    (20, {"uid": 123, "season": 20}, 3),
+    ("all", {"uid": 123, "season": -1}, 12),
+    (-1, {"uid": 123, "season": -1}, 12),
+])
+def test_class_season_selector_uses_the_selected_hero_data(season, payload, wins):
+    client = SeasonClient()
+    result = PlayerStats(client, 123).classes(season=season)
+    assert client.request == ("/player/stats/heroes", payload)
+    assert result.classes[1].competitive.wins == wins
+
+
+def test_detailed_hero_stats_accept_the_same_all_seasons_selector():
+    client = SeasonClient()
+    rows = PlayerStats(client, 123).heroes(season="all")
+    assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
+    assert rows[0].competitive.wins == 12
+
+
+def test_mcp_stats_exposes_all_seasons_and_forwards_the_selector(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    server = pytest.importorskip("rivalsdata.mcp_server", exc_type=ImportError)
+    client = SeasonClient()
+    client.get_player = lambda value: SimpleNamespace(stats=PlayerStats(client, 123))
+    monkeypatch.setattr(server, "_call", lambda fn, *a, **kw: fn(client, *a, **kw))
+    result = server.get_player_stats("123", category="classes", season="all")
+    assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
+    assert result.classes[1].competitive.wins == 12
+    tools = asyncio.run(server.mcp.list_tools())
+    schema = next(tool.inputSchema for tool in tools if tool.name == "get_player_stats")
+    assert {"const": "all", "type": "string"} in schema["properties"]["season"]["anyOf"]

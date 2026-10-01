@@ -205,13 +205,25 @@ class PlayerHeroes(PlayerResource):
 class PlayerStats(PlayerResource):
     """Detailed per-player statistics tabs."""
 
-    def heroes(self, *, season: int | None = None) -> list[HeroStatsRecord]:
-        payload = {"season": season} if season is not None else {}
+    def heroes(
+        self, *, season: int | Literal["all"] | None = None
+    ) -> list[HeroStatsRecord]:
+        """Fetch mode-specific hero stats for a season or all seasons.
+
+        ``season="all"`` sends the API's all-seasons selector (-1). Omitting
+        ``season`` preserves the endpoint default.
+        """
+        season_id = -1 if season == "all" else season
+        payload = {"season": season_id} if season_id is not None else {}
         return _many(self._post("/player/stats/heroes", **payload), HeroStatsRecord)
 
-    def classes(self, *, season: int | None = None) -> ClassStatsResponse:
+    def classes(
+        self, *, season: int | Literal["all"] | None = None
+    ) -> ClassStatsResponse:
         """Sum hero records by tank/support/dps, separately for each mode.
 
+        Supply a season ID or ``season="all"`` for combined all-seasons totals.
+        Omitting ``season`` preserves the endpoint default.
         Win rate uses total wins / (wins + losses), not the average of hero
         percentages. Counts describe hero participation: switching heroes can
         cause one match to contribute to multiple hero or class records.

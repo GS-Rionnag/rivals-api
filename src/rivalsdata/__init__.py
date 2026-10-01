@@ -153,4 +153,4 @@ __all__ = [
     "hero_id",
     "hero_name",
 ]
-__version__ = "1.2.0"
+__version__ = "1.2.1"

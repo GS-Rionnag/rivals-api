@@ -51,17 +51,26 @@ print(hero_season[0].win_rate)  # integer percent when wins/losses are present
 
 Calculated player class statistics are available through
 `player.stats.classes(season=20)` and the MCP `get_player_stats` tool with
-`category="classes"`. Each row contains `player_class` (`tank`, `support`,
+`category="classes"`. Pass a numeric season ID for that season, or
+`season="all"` for combined all-seasons data, matching `player.heroes.fetch`.
+Omitting the season uses the endpoint default. `player.stats.heroes` also
+accepts `season="all"`. Each row contains `player_class` (`tank`, `support`,
 `dps`), the official role, hero IDs, and separate `competitive` and `quickplay`
 totals for games, wins, losses, and available MVP/SVP counts.
 
 ```python
 with RivalsDataClient() as rd:
-    stats = rd.get_player("GS-").stats.classes(season=20)
+    player = rd.get_player("GS-")
+    stats = player.stats.classes(season=20)
+    all_seasons = player.stats.classes(season="all")
     for row in stats.classes:
         print(row.player_class, row.competitive.win_rate)
     print(stats.excluded)  # Unknown roles or incomplete win/loss records
 ```
+
+For MCP, use `get_player_stats(uid_or_name="GS-", category="classes", season=20)`
+for one season, or `season="all"` for combined all-seasons stats. Both return
+the same class response structure.
 
 Win rates are `total wins / (total wins + total losses)`, rounded to an integer
 percent. They are weighted by hero records, rather than averaging hero win

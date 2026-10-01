@@ -408,19 +408,23 @@ def get_player_matches(
 
 @mcp.tool()
 def get_player_stats(
-    uid_or_name: str, category: str = "heroes", season: int | None = None
+    uid_or_name: str, category: str = "heroes",
+    season: int | Literal["all"] | None = None,
 ) -> Any:
     """Get player stats: heroes, maps, bans, or calculated classes.
 
     Classes sum hero wins/losses by tank/support/dps and game mode; these are
     hero participation totals, which can count a match more than once.
+    Supply a season ID or "all" for combined all-seasons totals. Omitting the
+    season uses the endpoint default.
     """
     methods = {"heroes": "heroes", "maps": "maps", "bans": "bans", "classes": "classes"}
     if category not in methods:
         raise ValueError("category must be one of: heroes, maps, bans, classes")
     def fetch(client: RivalsDataClient, value: str, category: str,
-              season: int | None) -> Any:
-        return getattr(client.get_player(value).stats, methods[category])(season=season)
+              season: int | Literal["all"] | None) -> Any:
+        season_id = -1 if season == "all" else season
+        return getattr(client.get_player(value).stats, methods[category])(season=season_id)
     return _call(fetch, uid_or_name, category, season)
 
 
