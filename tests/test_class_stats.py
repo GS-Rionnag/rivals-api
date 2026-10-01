@@ -7,7 +7,7 @@ from rivalsdata import (
     hero_class,
     hero_name,
 )
-from rivalsdata.resources import PlayerStats
+from rivalsdata.resources import PlayerHeroes, PlayerStats
 
 
 class HeroClient:
@@ -42,6 +42,7 @@ def test_weighted_class_totals_modes_and_exclusions():
     assert groups["dps"].quickplay.win_rate is None
     assert len(result.excluded) == 3
     assert result.to_dict()["classes"][0]["competitive"]["win_rate"] == 83
+    assert any("excluded" in warning for warning in result.metadata.warnings)
 
 
 def test_roles_use_observed_ids_and_do_not_guess_generic_deadpool():
@@ -77,6 +78,16 @@ def test_class_season_selector_uses_the_selected_hero_data(season, payload, wins
     result = PlayerStats(client, 123).classes(season=season)
     assert client.request == ("/player/stats/heroes", payload)
     assert result.classes[1].competitive.wins == wins
+    metadata = result.to_dict()["metadata"]
+    assert metadata["counts_basis"] == "summed_hero_records"
+    assert metadata["unique_matches_verified"] is False
+    assert metadata["hero_switch_attribution"] == "unknown"
+    assert metadata["season"] == ("all" if season in ("all", -1) else season)
+    assert metadata["season_scope"] == (
+        "all" if season in ("all", -1) else
+        "endpoint_default" if season is None else "season"
+    )
+    assert len(metadata["warnings"]) == (2 if season in ("all", -1) else 1)
 
 
 def test_detailed_hero_stats_accept_the_same_all_seasons_selector():
@@ -84,6 +95,16 @@ def test_detailed_hero_stats_accept_the_same_all_seasons_selector():
     rows = PlayerStats(client, 123).heroes(season="all")
     assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
     assert rows[0].competitive.wins == 12
+
+
+@pytest.mark.parametrize("season,season_id", [(None, None), (20, 20), ("all", -1)])
+def test_hero_summary_season_selector(season, season_id):
+    client = SeasonClient()
+    PlayerHeroes(client, 123).fetch(season=season)
+    expected = {"uid": 123}
+    if season_id is not None:
+        expected["season"] = season_id
+    assert client.request == ("/player/heroes", expected)
 
 
 def test_mcp_stats_exposes_all_seasons_and_forwards_the_selector(monkeypatch):
@@ -97,6 +118,8 @@ def test_mcp_stats_exposes_all_seasons_and_forwards_the_selector(monkeypatch):
     result = server.get_player_stats("123", category="classes", season="all")
     assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
     assert result.classes[1].competitive.wins == 12
+    assert result.metadata.season == "all"
+    assert result.metadata.season_scope == "all"
     tools = asyncio.run(server.mcp.list_tools())
     schema = next(tool.inputSchema for tool in tools if tool.name == "get_player_stats")
     assert {"const": "all", "type": "string"} in schema["properties"]["season"]["anyOf"]

@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `1.2.2`.
+- Version: `1.2.3`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
