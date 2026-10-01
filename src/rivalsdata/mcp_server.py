@@ -108,7 +108,11 @@ def search_players(name: str) -> dict[str, Any]:
 
 @mcp.tool()
 def get_player(uid_or_name: str) -> dict[str, Any]:
-    """Get a public player overview by numeric UID or in-game name."""
+    """Get a public player overview by numeric UID or in-game name.
+
+    The overview's overall win rate refers to the current competitive season
+    (latest available season with usable counts), not all seasons combined.
+    """
     return _call(lambda client, value: client.get_player(value).raw, uid_or_name)
 
 
@@ -141,6 +145,7 @@ def show_player_dashboard(
     combining live-match, hero, and match-history pulls. MCP Apps hosts can
     render the returned dashboard resource; all values are escaped before HTML
     output.
+    The competitive record and win rate are for the latest available season.
     """
     with RivalsDataClient() as client:
         player = client.get_player(uid_or_name)
@@ -168,7 +173,7 @@ def show_player_dashboard(
             competitive_summary = (
                 f'<div class="competitive-line">'
                 f'<span>{battles:,} competitive games</span>'
-                + (f'<span>{rate}% win rate</span>' if rate is not None else "")
+                + (f'<span>{rate}% season win rate</span>' if rate is not None else "")
                 + (f'<span>{escape(str(score))} RP</span>' if score is not None else "")
                 + '</div>'
             )

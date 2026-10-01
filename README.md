@@ -28,6 +28,7 @@ print(hero_id("Loki"))  # 1016
 with RivalsDataClient() as rd:
     player = rd.get_player("GS-")  # numeric UID works too
     print(player.name, player.level, player.rank_game_season)
+    print(player.win_rate)  # Current-season competitive win rate
 
     # Player profile sections are lazy resource managers.
     hero_season = player.heroes.fetch(season=20)
@@ -48,6 +49,11 @@ with RivalsDataClient() as rd:
 
 print(hero_season[0].win_rate)  # integer percent when wins/losses are present
 ```
+
+The player overview's overall win rate (`player.win_rate`) is the **current-season
+competitive win rate**. It uses the latest available competitive season with
+usable counts when a direct source rate is absent; it does not combine seasons.
+Hero and class stats use the season selector supplied to their own methods.
 
 Calculated player class statistics are available through
 `player.stats.classes(season=20)` and the MCP `get_player_stats` tool with

@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `1.2.1`.
+- Version: `1.2.2`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
@@ -53,6 +53,12 @@ endpoint takes a numeric UID; the wrapper can resolve a username first.
 Favorites requires numeric UIDs and returns player summary rows.
 Rows offer `.win_rate` and `.winrate` integer-percent access when data supports
 it; all original data remains in mapping access.
+
+The player overview's overall win rate (`player.win_rate`) is for the current
+competitive season (latest available season with usable counts when there is no
+direct source rate), not an all-seasons aggregate. Keep this scope explicit in
+docs, MCP descriptions, and dashboard labels. Hero/class stats have separate
+season selectors.
 
 `player.stats.classes(season=...)` groups observed hero IDs into tank, support,
 and DPS. Supply a numeric season ID for one season or `season="all"` for

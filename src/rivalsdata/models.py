@@ -983,7 +983,11 @@ class Player(DataModel):
 
     @property
     def win_rate(self) -> int | None:
-        """Overall competitive win rate when the profile includes wins/losses."""
+        """Current-season competitive win rate when profile counts are available.
+
+        Uses a direct source rate or the latest available competitive season
+        with usable counts. This property does not aggregate across seasons.
+        """
         direct = StatRecord(self._data).win_rate
         if direct is not None:
             return direct

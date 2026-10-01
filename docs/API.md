@@ -48,6 +48,12 @@ integer percentage from a direct win-rate field, `wins`/`losses`, or the
 competitive profile row's `win_count`/`battle_count`. If the source provides
 none of these, it returns `None`.
 
+The player overview's overall win rate (`Player.win_rate`) refers to the current
+competitive season, using the latest available competitive season with usable
+counts when a direct source rate is absent. It does not sum historical seasons.
+MCP overview/dashboard descriptions identify this scope, and the dashboard labels
+the value as a season win rate. Hero and class rates follow their season selectors.
+
 ## Observed UI and routes
 
 `player.stats.classes(season=...)` derives tank (Vanguard), support (Strategist),
