@@ -294,8 +294,8 @@ class PlayerStats(PlayerResource):
                 group[mode] = totals
         all_seasons = season in ("all", -1)
         warnings = [
-            "Hero records may overlap within a match. Class totals must not "
-            "be used to calculate the player's overall match win rate."
+            ("Hero records may overlap within a match. Class totals must not "
+             "be used to calculate the player's overall match win rate.")
         ]
         if all_seasons:
             warnings.append(
