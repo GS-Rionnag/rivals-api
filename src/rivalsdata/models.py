@@ -388,12 +388,21 @@ class HeroModeStats(StatRecord):
 
 
 class HeroStatsRecord(Character):
+    """Detailed hero stats including the source's leaderboard position.
+
+    ``rank`` is the number shown as #N in the profile's left-hand hero card.
+    It is shared source metadata, not a rank calculated for the selected mode.
+    None means the source did not supply a position.
+    """
+
+    mode: str | None
     competitive: HeroModeStats | None
     quickplay: HeroModeStats | None
     rank: int | str | None
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)
+        self._data.setdefault("rank", None)
         for key in ("competitive", "quickplay"):
             if isinstance(self._data.get(key), Mapping):
                 self._data[key] = HeroModeStats(self._data[key])

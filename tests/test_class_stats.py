@@ -92,9 +92,15 @@ def test_class_season_selector_uses_the_selected_hero_data(season, payload, wins
 
 def test_detailed_hero_stats_accept_the_same_all_seasons_selector():
     client = SeasonClient()
-    rows = PlayerStats(client, 123).heroes(season="all")
+    rows = PlayerStats(client, 123).heroes(mode="competitive", season="all")
     assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
     assert rows[0].competitive.wins == 12
+    assert rows[0].mode == "competitive"
+    assert "quickplay" not in rows[0]
+    with pytest.raises(TypeError):
+        PlayerStats(client, 123).heroes(season="all")
+    with pytest.raises(ValueError):
+        PlayerStats(client, 123).heroes(mode="invalid", season="all")
 
 
 @pytest.mark.parametrize("season,season_id", [(None, None), (20, 20), ("all", -1)])

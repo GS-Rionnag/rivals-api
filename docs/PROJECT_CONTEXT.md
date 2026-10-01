@@ -15,7 +15,7 @@ as public, stable methods. Keep requests respectful and conservative.
 ## Current package
 
 - Distribution: `rivalsdata-api`; import: `rivalsdata`.
-- Version: `1.2.3`.
+- Version: `1.3.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsDataClient`.
@@ -65,7 +65,17 @@ and DPS. Supply a numeric season ID for one season or `season="all"` for
 combined all-seasons stats; the latter sends `season=-1` to the upstream API.
 The detailed `player.stats.heroes` method and MCP stats tool accept the same
 selector. Omitting the season keeps the endpoint default.
-It sums games, wins, losses, and available MVP/SVP counts separately
+Detailed `player.stats.heroes` now requires `mode="competitive"` or
+`mode="quickplay"`; it filters to that mode, omits the opposite mode key, and
+sorts by selected-mode games descending (stable ties), matching the website.
+MCP requires mode for category heroes; other categories do not require it.
+Class aggregation uses a private full-response fetch so both class modes stay
+available. Hero summaries (`player.heroes.fetch`) remain unchanged.
+Detailed hero rows always expose `rank` (None if absent), preserving the
+source's top-level hero leaderboard position shown as #N in the left card.
+It is not recalculated for quickplay or all seasons. GS-'s Loki was #408 in
+both the card and both hero endpoint responses on 2026-10-01.
+Class calculation sums games, wins, losses, and available MVP/SVP counts separately
 for competitive and quickplay, with win rates calculated from summed wins and
 losses. The response has typed `classes` rows and an `excluded` list for unknown
 roles or incomplete win/loss data. MCP exposes it through `get_player_stats`

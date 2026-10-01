@@ -78,6 +78,29 @@ For MCP, use `get_player_stats(uid_or_name="GS-", category="classes", season=20)
 for one season, or `season="all"` for combined all-seasons stats. Both return
 the same class response structure.
 
+Detailed hero stats require a mode and match the website's selected tab:
+
+```python
+competitive = player.stats.heroes(mode="competitive", season="all")
+quickplay = player.stats.heroes(mode="quickplay", season=20)
+print(competitive[0].competitive.games)
+print(competitive[0].rank)  # Hero leaderboard position, or None if unavailable
+```
+
+Only heroes with data for the chosen mode are returned, with that mode's nested
+stats and a `mode` label; the other mode is omitted. Rows are sorted by the
+selected mode's games played descending, with ties retaining the JSON order.
+The source returns both modes in one response; filtering and sorting happen
+in this package, as they do on the website. Existing calls to
+`player.stats.heroes()` must now supply `mode`. MCP also requires `mode` when
+`get_player_stats` uses `category="heroes"`; other categories do not require it.
+The separate summary method `player.heroes.fetch()` keeps its existing behavior.
+
+Hero stats include the source's top-level `rank`, matching the **#N** displayed
+in the left-hand hero card. It is preserved for either mode and all-seasons
+requests when supplied by the source; it is not recalculated as a quickplay or
+all-seasons leaderboard position. Missing ranks are returned as `None`.
+
 Win rates are `total wins / (total wins + total losses)`, rounded to an integer
 percent. They are weighted by hero records, rather than averaging hero win
 rates. The response's `metadata` identifies the source, formula, and requested

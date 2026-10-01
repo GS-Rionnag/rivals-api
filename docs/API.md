@@ -21,7 +21,7 @@ and `.raw` so upstream additions are not discarded.
 | Player match history | `POST /player/matches/cached` (or `/player/matches`) | `uid`, `cursor`, optional `season`; cached endpoint also accepts `mode`, `hero`, `teammate` | Cached response keys observed: `matches`, `next_cursor`, `source`; match rows include `assists`, `deaths`, `game_mode_id`, `game_play_mode_id`, `hero_id`, `is_mvp`, `is_svp`, `is_win`, `kills`, `map_id`, `match_uid`, `os`, `placement`, `platform`, `rank_level`, `rank_score`, `score_change`, `season`, `team_score`, `timestamp`, `winner_camp`. A sample profile marked its history private; a private profile can return no visible match rows. |
 | Player teammates | `POST /player/teammates` | `uid`, optional `season`, `mode` | Array rows: `games`, `icon`, `losses`, `name`, `teammate_uid`, `wins`. |
 | Player proficiency | `POST /player/proficiency` | `uid` | Object keyed by account id (sample: `11001_{uid}`); each account has `hero_proficiency_infos` keyed by hero id, with `proficiency_level` and `proficiency_point`. |
-| Player hero stats | `POST /player/stats/heroes` | `uid`, optional `season` | Array rows: `competitive`, `hero_id`, `quickplay`, `rank`. Each mode includes games, wins/losses, KDA, MVP/SVP counts, accuracy, and `per_10`/`per_game` combat averages. |
+| Player hero stats | `POST /player/stats/heroes` | `uid`, optional `season`; wrapper requires `mode` (not sent upstream) | Source rows: `competitive`, `hero_id`, `quickplay`, `rank`. Each mode includes games, wins/losses, KDA, MVP/SVP counts, accuracy, and `per_10`/`per_game` combat averages. Wrapper selects one mode, sorts by its games, and includes `rank` (or `None`). |
 | Player map stats | `POST /player/stats/maps` | `uid`, optional `season` | Array rows: `map`, `competitive`, `quickplay`; each mode has games, wins, losses, winrate. |
 | Player ban stats | `POST /player/stats/bans` | `uid`, optional `season` | Array rows: `hero_id`, `matches`, `wins`, `losses`, `winrate`. |
 | Player punishments | `POST /player/punishments` | `uid` | Object keys: `chat`, `login`, `rank`; non-null entries include `expire`, `name`, `reason`, `time`, `uid`. |
@@ -76,6 +76,34 @@ unverified. Warnings flag those limitations and any excluded records.
 
 The roster at `/stats` on 2026-09-30 identifies Deadpool variants as 10571
 (tank), 10572 (DPS), and 10573 (support), Daredevil as 1055, and Angela as 1056.
+
+### Detailed hero mode selection and ordering
+
+`player.stats.heroes(mode="competitive", season="all")` requires either
+`"competitive"` or `"quickplay"`. Missing mode raises `TypeError`; unsupported
+values raise `ValueError`. The upstream `/player/stats/heroes` request still
+contains only UID and optional season, because the source returns both modes
+together. The wrapper filters heroes without the selected mode's data, omits
+the other mode's key, adds `mode`, and sorts by selected-mode `games` descending.
+Equal game counts retain source order. Access stats through the selected nested
+key, such as `row.competitive` or `row.quickplay`.
+
+`row.rank` is the source-supplied hero leaderboard position from the top-level
+JSON `rank` field, or `None` when unavailable. On 2026-10-01, GS-'s left-hand
+Loki card showed #408; both `/player/heroes` and `/player/stats/heroes` supplied
+`rank: 408` for hero 1016. The detailed Stats tab did not display that field.
+Mode filtering preserves it. All-seasons requests may also return a rank, but
+the wrapper does not infer its leaderboard period or recalculate it per mode.
+
+Camoufox inspection of GS-'s All Seasons page on 2026-10-01 found the JSON sorted
+by combined competitive + quickplay games. The Competitive tab's 40 rows and
+Quickplay tab's 39 rows each exactly matched sorting by that mode's games.
+Switching tabs sent no additional hero-stats request.
+
+MCP `get_player_stats(category="heroes", mode=..., season=...)` requires mode
+for heroes and rejects missing or invalid values before making a request.
+Other categories retain their behavior; class stats still aggregate both modes
+from the complete source response. `player.heroes.fetch()` is unchanged.
 
 ### Character playtime investigation (2026-09-30)
 

@@ -415,9 +415,15 @@ def get_player_matches(
 def get_player_stats(
     uid_or_name: str, category: str = "heroes",
     season: int | Literal["all"] | None = None,
+    mode: Literal["competitive", "quickplay"] | None = None,
 ) -> Any:
     """Get player stats: heroes, maps, bans, or calculated classes.
 
+    Heroes REQUIRE mode="competitive" or mode="quickplay". Only that mode's
+    hero records are returned, sorted by its games played descending to match
+    the website. Mode is not used for the other categories.
+    Hero rows include rank: the source's hero leaderboard position, also shown
+    as #N in the left-hand profile card, or null when the source has no rank.
     Classes sum hero wins/losses by tank/support/dps and game mode; these are
     summed hero records, which may overlap within a match. The response metadata
     explains the calculation and scope; class totals cannot establish a player's
@@ -428,11 +434,17 @@ def get_player_stats(
     methods = {"heroes": "heroes", "maps": "maps", "bans": "bans", "classes": "classes"}
     if category not in methods:
         raise ValueError("category must be one of: heroes, maps, bans, classes")
+    if category == "heroes" and mode not in ("competitive", "quickplay"):
+        raise ValueError("heroes require mode=competitive or mode=quickplay")
     def fetch(client: RivalsDataClient, value: str, category: str,
-              season: int | Literal["all"] | None) -> Any:
+              season: int | Literal["all"] | None,
+              mode: Literal["competitive", "quickplay"] | None) -> Any:
         season_id = -1 if season == "all" else season
-        return getattr(client.get_player(value).stats, methods[category])(season=season_id)
-    return _call(fetch, uid_or_name, category, season)
+        filters: dict[str, Any] = {"season": season_id}
+        if category == "heroes":
+            filters["mode"] = mode
+        return getattr(client.get_player(value).stats, methods[category])(**filters)
+    return _call(fetch, uid_or_name, category, season, mode)
 
 
 @mcp.tool()

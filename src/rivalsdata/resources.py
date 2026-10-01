@@ -206,13 +206,32 @@ class PlayerStats(PlayerResource):
     """Detailed per-player statistics tabs."""
 
     def heroes(
-        self, *, season: int | Literal["all"] | None = None
+        self, *, mode: Literal["competitive", "quickplay"],
+        season: int | Literal["all"] | None = None,
     ) -> list[HeroStatsRecord]:
-        """Fetch mode-specific hero stats for a season or all seasons.
+        """Fetch heroes for a required mode, in the website's most-played order.
 
+        The source supplies both modes together. This method keeps only heroes
+        with the selected mode's data, removes the other mode, and sorts by
+        selected-mode games descending. Ties retain the source order.
+        Each row includes ``rank`` (the source's hero leaderboard position,
+        also shown in the left-hand profile card), or None when unavailable.
         ``season="all"`` sends the API's all-seasons selector (-1). Omitting
         ``season`` preserves the endpoint default.
         """
+        if mode not in ("competitive", "quickplay"):
+            raise ValueError("mode must be competitive or quickplay")
+        heroes = [hero for hero in self._hero_records(season=season)
+                  if hero.get(mode) is not None]
+        heroes.sort(key=lambda hero: hero[mode].get("games", 0) or 0, reverse=True)
+        other_mode = "quickplay" if mode == "competitive" else "competitive"
+        return [HeroStatsRecord({key: value for key, value in hero.raw.items()
+                                 if key != other_mode}, mode=mode) for hero in heroes]
+
+    def _hero_records(
+        self, *, season: int | Literal["all"] | None = None
+    ) -> list[HeroStatsRecord]:
+        """Fetch both upstream modes for class aggregation and hero filtering."""
         season_id = -1 if season == "all" else season
         payload = {"season": season_id} if season_id is not None else {}
         return _many(self._post("/player/stats/heroes", **payload), HeroStatsRecord)
@@ -238,7 +257,7 @@ class PlayerStats(PlayerResource):
                                ("dps", "Duelist"))
         }
         excluded = []
-        for hero in self.heroes(season=season):
+        for hero in self._hero_records(season=season):
             identifier = hero.get("hero_id")
             name = hero_class(identifier)
             if name is None:
