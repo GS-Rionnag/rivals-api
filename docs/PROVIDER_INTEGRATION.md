@@ -7,7 +7,8 @@ from rivals_api import RivalsClient
 
 with RivalsClient(use_browser_fallback=True) as client:
     player = client.get_player(691218686)
-    page = player.matches.fetch(mode="custom", season=20, cached=False)
+    page = player.matches.fetch(limit=25, mode="custom", season=20, cached=False)
+    complete_history = player.matches.fetch(limit="all", mode="custom", season=20)
     match = client.matches.get(page.matches[0].match_uid)
     for team in match.teams:
         for participant in team.players:
@@ -22,18 +23,21 @@ with RivalsClient(use_browser_fallback=True) as client:
 - RivalsTracker is the first fallback for profiles/history, especially Custom history. Full matches add RivalsTracker hero K/D/A and Tracker hero combat segments. Tracker adds advanced stats plus raw/display/percentile metadata. `provider_errors` on the client records optional enrichment failures.
 - Original RD lifetime hero/class selectors remain supported. Their records are not enriched from undocumented RT lifetime selectors or Tracker's current-season default. `career(season="all")` explicitly enumerates the Tracker season catalog and returns separate season segments.
 - Global rank/platform buckets differ. Additional tier-list/team-up/leaderboard data is stored separately with its scope; existing filtered aggregates are preserved.
-- History's `next_cursor` is opaque and must be reused with the same UID, season, mode, hero, teammate and cached setting. Federation uses both providers' pagination and deduplicates across pages. Ordering is descending within each returned page; cross-provider pagination does not establish globally sorted page boundaries. Use `player.matches.iter(...)` to exhaust the history, including empty continuation pages. Numeric modes and quickplay/competitive/custom names resolve to IDs 1/2/3.
+- History's `next_cursor` is opaque and must be reused with the same UID, season, mode, hero, teammate and cached setting. Federation uses both providers' pagination and deduplicates across pages. Numeric `fetch(limit=...)` stops at the requested merged row count and preserves excess provider rows in its cursor; `limit="all"` traverses the full history. Page boundaries are resumable, but do not guarantee a globally sorted order across provider pages. `player.matches.iter(...)` exhausts all available history. Numeric modes and quickplay/competitive/custom names resolve to IDs 1/2/3.
 - RivalsTracker cannot apply a teammate filter. Such requests retain RD filtering and explicitly report that the alternative provider was skipped. Explicit season/mode/hero filters are checked on all rows, including uncached responses that ignore upstream selectors. Uncached teammate filtering verifies same-team membership from full match detail; this costs additional reads.
 - Tracker hero participation counts may be fractional. Raw stat keys/display labels are retained. `totalDamageTaken` is never silently relabeled as the client's `blocked` statistic; RT's opaque `last_kill` is preserved under its source key.
-- Provider sessions/caches are independent and close with the client. Cache is bounded (128 entries per provider), configurable with `provider_cache_ttl`, and returns defensive copies. Browser contexts are reused during a client lifetime and close on exit. Use the synchronous client on the thread that created its browser context.
+- Provider response caches are independent and close with the client. The calculated-history cache is shared within the Python process (bounded to 16 history sets and 500 match details), so `method="cached"` can reuse a prior full-history query across client instances. A full fetch that had provider errors is still cached, but its result records incomplete coverage; cached calculations make no requests to fill gaps. Browser contexts are reused during a client lifetime and close on exit. Use the synchronous client on the thread that created its browser context.
 
 ## Existing functions with additions
 
 | Function | Addition |
 |---|---|
 | `client.get_player(...)` | RT fallback, section visibility and missing profile fields |
-| `player.matches.fetch(...)` | Combined history, Custom coverage, resumable deduplication and source errors |
+| `player.matches.fetch(limit=..., ...)` | Combined history; numeric limits stop after that many merged matches and return a resumable cursor; `limit="all"` traverses all pages. Both deduplicate and report source errors. |
 | `client.matches.get(...)` | Per-hero match K/D/A, advanced combat/hero segments and completeness flags |
+| `player.matches.fetch_win_rate(method=...)` | Current competitive provider-rate average (`estimate`), unique-match calculation over all matching history pages (`exact`), or request-free calculation from a prior full-history fetch (`cached`) |
+| `player.matches.fetch_hero_win_rates(method=...)` | Per-hero rates from provider participation summaries (`estimate`) or match-by-match attribution to the longest-played hero (`exact`/`cached`) |
+| `player.matches.fetch_class_win_rates(method=...)` | Per-class rates from summed provider hero participation (`estimate`) or each match assigned to the longest-played hero's class (`exact`/`cached`) |
 | `player.stats.heroes(...)` | Cumulative RT combat/playtime and Tracker advanced stat metadata; original mode filtering and ordering remain |
 | `player.stats.classes(...)` | Additional cumulative combat/playtime totals where all contributing rows have data |
 | `player.teammates.fetch(...)` | Last encounter and encounter/season metadata from Tracker |
@@ -76,7 +80,17 @@ The other methods on `player.analytics` and `client.analytics` are the underlyin
 
 ## MCP
 
-43 read-only tools are registered. They cover the new functions and the previously Python-only crosshairs, proficiency, punishments, name history, hero leaderboard, public profile and favorites. `get_player_matches` now accepts `cached=False` and mode names.
+The read-only tools cover the new functions and the previously Python-only crosshairs, proficiency, punishments, name history, hero leaderboard, public profile and favorites. The match-history tool accepts `cached=False` and mode names. The three win-rate tools accept `method="estimate"`, `"exact"`, or `"cached"` and return the same result envelopes as the Python resource methods.
+
+### Win-rate calculation choices
+
+Each rate method has a distinct cost and meaning:
+
+- `estimate` is the default. Overall competitive win rate averages the available RivalsData and RivalsTracker reported rates without weighting by their match counts. Hero rates average available per-hero provider rates. Class rates first sum provider hero-participation counts within each class, calculate one rate per provider/class, then average the available provider rates. This is fast, approximate, and is not derived from the fetched match history. The overall estimate only supports competitive mode and does not accept hero or teammate filters; use `exact` for a filtered calculation.
+- `exact` requests all pages for the requested scope and deduplicates overall results by match ID. It counts wins and losses only when the outcome is known; `unknown_results` is excluded from the win-rate denominator. For hero and class rates, the implementation loads match details and assigns each match to the player's hero with the most recorded play time. If details have no usable hero-time entry, it falls back to the match-history `hero_id`; missing or unrecognized hero/class data is excluded. This can make one detail request per match, so it can be slow and may encounter provider limits. Provider and detail errors are returned with the result.
+- `cached` makes no network requests. It requires a prior full `player.matches.fetch(limit="all")` in the same Python process and uses whatever rows that fetch cached. Cache entries record provider errors and completeness; cached results do not retry missing pages. A teammate filter cannot be verified from summary history and raises an error. Hero/class calculations use already-cached match details when available and otherwise use the history row's `hero_id`; `summary_hero_fallbacks` shows how many matches used that fallback.
+
+For exact and cached results, `matches` is the number of unique history rows considered; `known_results` and `unknown_results` distinguish outcomes usable for the rate. Hero/class entries also expose per-category match and outcome counts, detail-load/fallback counts, and the attribution rule. Percentages are returned as `win_rate_pct` with two decimal places and `win_rate` rounded to an integer. An exact calculation describes all rows the providers made available for that query, not a guarantee of lifetime coverage.
 
 Use `search_players(name="silo")` to get a list of matching accounts, with each
 candidate's name and numeric game UID. Select an account, then call

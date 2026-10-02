@@ -185,7 +185,7 @@ def show_player_dashboard(
         player = client.get_player(uid_or_name)
         live = _plain(player.live_game.fetch()) if section == "live_match" else None
         hero_rows = _plain(player.heroes.fetch()) if section == "hero_form" else []
-        history = _plain(player.matches.fetch()) if section == "recent_matches" else {}
+        history = _plain(player.matches.fetch(limit=5)) if section == "recent_matches" else {}
 
     player_name = str(player.get("name", uid_or_name))
     name = escape(player_name)
@@ -438,6 +438,7 @@ def get_player_heroes(uid_or_name: str, season: int | None = None) -> Any:
 @mcp.tool()
 def get_player_matches(
     uid_or_name: str,
+    limit: int | Literal["all"],
     season: int | None = None,
     cursor: str | None = None,
     mode: str | None = None,
@@ -445,16 +446,65 @@ def get_player_matches(
     teammate: str | None = None,
     cached: bool = True,
 ) -> Any:
-    """Get combined visible match history; reuse next_cursor with the same filters.
+    """Get combined match history with a required positive limit or limit="all".
 
-    Set cached=False to request uncached RivalsData history. Mode accepts
-    quickplay/competitive/custom or numeric mode IDs 1/2/3.
+    Numeric limits return at most that many merged matches and a cursor when
+    more remain. "all" follows every available page. Set cached=False to request
+    uncached RivalsData history. Mode accepts quickplay/competitive/custom or
+    numeric mode IDs 1/2/3.
     """
     def fetch(client: RivalsClient, value: str, **filters: Any) -> Any:
         player = client.get_player(value)
         return player.matches.fetch(**filters)
-    return _call(fetch, uid_or_name, season=season, cursor=cursor, mode=mode,
+    return _call(fetch, uid_or_name, limit=limit, season=season, cursor=cursor, mode=mode,
                  hero=hero, teammate=teammate, cached=cached)
+
+
+@mcp.tool()
+def get_player_win_rate(
+    uid_or_name: str,
+    method: Literal["estimate", "exact", "cached"] = "estimate",
+    season: int | None = None,
+    mode: str | None = None,
+    hero: str | None = None,
+    teammate: str | None = None,
+    cached: bool = True,
+) -> Any:
+    """Estimate from provider summaries, calculate all matches, or use cached history.
+
+    Estimate averages RivalsData and RivalsTracker current competitive rates.
+    Exact traverses all history pages. Cached reuses a prior full-history fetch.
+    """
+    def fetch(client: RivalsClient, value: str, **filters: Any) -> Any:
+        return client.get_player(value).matches.fetch_win_rate(**filters)
+    return _call(fetch, uid_or_name, method=method, season=season, mode=mode, hero=hero,
+                 teammate=teammate, cached=cached)
+
+
+@mcp.tool()
+def get_player_hero_win_rates(
+    uid_or_name: str,
+    method: Literal["estimate", "exact", "cached"] = "estimate",
+    season: int | Literal["all"] | None = None,
+    mode: Literal["competitive", "quickplay"] = "competitive",
+) -> Any:
+    """Return per-hero win rates using provider estimates, all matches, or cached history."""
+    return _call(lambda client, value, **filters:
+                 client.get_player(value).matches.fetch_hero_win_rates(**filters),
+                 uid_or_name, method=method, season=season, mode=mode)
+
+
+@mcp.tool()
+def get_player_class_win_rates(
+    uid_or_name: str,
+    method: Literal["estimate", "exact", "cached"] = "estimate",
+    season: int | Literal["all"] | None = None,
+    mode: Literal["competitive", "quickplay"] = "competitive",
+) -> Any:
+    """Return per-class win rates, attributing each match to its most-played hero."""
+    return _call(lambda client, value, **filters:
+                 client.get_player(value).matches.fetch_class_win_rates(**filters),
+                 uid_or_name, method=method, season=season, mode=mode)
 
 
 @mcp.tool()

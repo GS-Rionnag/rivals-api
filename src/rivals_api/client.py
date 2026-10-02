@@ -36,6 +36,10 @@ from .resources import (
 )
 
 
+_MATCH_HISTORY_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
+_MATCH_DETAIL_CACHE: dict[str, dict[str, Any]] = {}
+
+
 class RivalsClient:
     """Access and compare public Marvel Rivals data across providers."""
 
@@ -67,6 +71,8 @@ class RivalsClient:
         self.provider_cache_ttl = provider_cache_ttl
         self.providers = Providers(self)
         self._player_names: dict[int, str] = {}
+        self._match_history_cache = _MATCH_HISTORY_CACHE
+        self._match_detail_cache = _MATCH_DETAIL_CACHE
         self.provider_errors: list[dict[str, str]] = []
         self.session = requests.Session(impersonate=impersonate)
         self.session.headers.update(

@@ -1,7 +1,20 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 — 2026-10-02
 
+- `player.matches.fetch` now requires `limit`: pass a positive integer for a
+  bounded, resumable page of combined history, or `"all"` to traverse all
+  available pages. Results are merged and deduplicated across providers.
+- Added overall, hero, and class win-rate methods to Python and MCP. Each
+  defaults to a quick provider-summary estimate and also supports exact
+  calculations over match history or request-free calculations from full
+  history already cached in the current Python process. Hero/class exact rates
+  attribute matches using the player's longest-played hero from match details,
+  with a summary-hero fallback when detail evidence is unavailable.
+- Match history is shared in a bounded process-level calculation cache so
+  separate client instances can reuse previously fetched full history. Results
+  expose provider coverage, unknown outcomes, and hero attribution fallbacks;
+  exact hero/class calls may require a detail lookup for each match.
 - MCP `search_players(name)` now returns a list of matching players with names
   and numeric game UIDs instead of automatically resolving one account. Callers
   must handle list results, including an empty list for no matches.

@@ -35,7 +35,15 @@ with RivalsClient() as rd:
     hero_season = player.heroes.fetch(season=20)
     all_hero_seasons = player.heroes.fetch(season="all")
     map_stats = player.stats.maps(season=20)
-    match_page = player.matches.fetch(season=20)
+    match_page = player.matches.fetch(limit=20, season=20)
+    all_matches = player.matches.fetch(limit="all")
+    combined_rate = player.matches.fetch_win_rate(season=20)
+    print(combined_rate.win_rate_pct, combined_rate.provider_rates)
+    fast_rate = player.matches.fetch_win_rate()
+    exact_rate = player.matches.fetch_win_rate(method="exact")
+    cached_rate = player.matches.fetch_win_rate(method="cached")  # after fetch(limit="all")
+    hero_rates = player.matches.fetch_hero_win_rates(method="exact")
+    class_rates = player.matches.fetch_class_win_rates(method="cached")
 
     # Current match when its provider exposes it; Custom discovery is unsupported.
     live_game = player.live_game.fetch()
@@ -213,8 +221,29 @@ with annotations for fields observed in the API inventory. This includes
 `ProficiencyResponse`, `LeaderboardResponse`, `PunishmentsPage`, `XPPage`,
 `Top500Response`, and typed teammate, crosshair, stats, faction, and insight
 records. For example, `rd.matches.get(match_id)` returns a `Match`,
-`player.matches.fetch()` returns a `MatchHistory`, and
-`player.proficiency.fetch()` returns a `ProficiencyResponse`. Nested match
+`player.matches.fetch(limit=...)` returns a `MatchHistory`. The required limit
+is either a positive number (bounded fetch with a resumable cursor) or
+`"all"` (fetch every available page); both combine and deduplicate providers.
+The overall, hero, and class win-rate methods accept `method="estimate"` (the
+default), `"exact"`, or `"cached"`. Overall estimates average available
+RivalsData/RivalsTracker competitive rates; hero estimates average each
+provider's per-hero rates; class estimates aggregate provider hero-participation
+counts within each class before averaging provider rates. These estimates are
+fast and approximate, and include provider sample counts. Exact calculations
+traverse all available history pages and deduplicate by match ID. Hero/class
+exact calculations also inspect match details and assign each match to the
+player's longest-played hero, which can require one detail lookup per match.
+Cached calculations make no requests and reuse a prior
+`matches.fetch(limit="all")` in the same Python process, including across client
+instances. If the cached history fetch had provider errors, the calculation
+does not retry missing data; inspect its coverage/errors. Cached hero/class
+rates use cached playtime details when available and otherwise fall back to
+the history row's hero. The returned metadata reports sources, unknown results,
+provider errors, and hero-attribution fallback counts. See the
+[win-rate method guide](docs/PROVIDER_INTEGRATION.md#win-rate-calculation-choices)
+for the assumptions and costs of each method.
+MCP tools expose the same three methods. `player.proficiency.fetch()` returns a
+`ProficiencyResponse`. Nested match
 teams and participants are converted to `MatchTeam` and `MatchPlayer`; embedded
 character records use `Character`. Models support mapping access
 (`player["level"]`) and attribute access (`player.level`). Unknown upstream
@@ -291,7 +320,7 @@ Existing functions combine public RivalsData, RivalsTracker, and Tracker.gg data
 
 ## Documentation
 
-- [2.0.0 release notes and migration guide](docs/CHANGELOG.md)
+- [Release notes and migration guide](docs/CHANGELOG.md)
 - [Provider integration and data-selection rules](docs/PROVIDER_INTEGRATION.md)
 - [Research findings and unsupported features](docs/PROVIDER_FEATURE_GAPS.md)
 - [RivalsTracker API audit](docs/RIVALSTRACKER_API_AUDIT.md)

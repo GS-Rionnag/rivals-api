@@ -7,7 +7,7 @@ from typing import Any, Literal
 from urllib.parse import quote
 
 from .exceptions import RivalsDataError
-from .hero_ids import hero_class, hero_id
+from .hero_ids import hero_class, hero_id, hero_name
 from .models import (
     BanRecord,
     Character,
@@ -42,7 +42,7 @@ from .models import (
 from .models import (
     PlayerPunishments as PlayerPunishmentsModel,
 )
-from .normalize import merge, merge_match, mode_id, rt_match, tracker_match
+from .normalize import merge, merge_match, mode_id, rt_match, timestamp, tracker_match
 
 
 def _one(value: Any, model: type[DataModel] = DataModel) -> Any:
@@ -326,7 +326,7 @@ class PlayerStats(PlayerResource):
                         scope = {"uid": self.uid, "hero_id": int(identifier),
                                  "season": season_id, "mode": mode,
                                  "counts_basis": "hero_participation"}
-                        row[mode] = merge(row.get(mode, {}), supplemental, "rivalstracker",
+                        row[mode] = merge(row.get(mode) or {}, supplemental, "rivalstracker",
                                           primary_context={"kind": "career", "scope": scope},
                                           context={"kind": "career", "scope": scope})
                 result = list(by_id.values())
@@ -488,10 +488,13 @@ class PlayerMatches(PlayerResource):
     """Player match-history pages."""
 
     def fetch(
-        self, *, cursor: str | None = None, season: int | None = None,
+        self, *, limit: int | Literal["all"], cursor: str | None = None,
+        season: int | None = None,
         mode: str | None = None, hero: str | int | None = None,
         teammate: str | int | None = None, cached: bool = True,
     ) -> MatchHistory:
+        if limit != "all" and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+            raise ValueError("limit must be a positive integer or 'all'")
         if hero is not None:
             identifier = int(hero) if str(hero).isdecimal() else hero_id(str(hero))
             if identifier is None:
@@ -500,31 +503,409 @@ class PlayerMatches(PlayerResource):
         if teammate is not None:
             teammate = int(teammate) if str(teammate).isdecimal() else int(
                 self._client.resolve_player(str(teammate))["uid"])
-        payload: dict[str, Any] = {"cursor": cursor}
-        for key, value in (("season", season), ("mode", mode), ("hero", hero), ("teammate", teammate)):
-            if value is not None:
-                payload[key] = value
-        path = "/player/matches/cached" if cached else "/player/matches"
-        if getattr(self._client, "enrich", False):
-            from .history import fetch_history
+        include_rt = bool(getattr(self._client, "enrich", False))
+        from .history import fetch_history
 
-            return fetch_history(self, cursor=cursor, season=season, mode=mode,
-                                 hero=hero, teammate=teammate, cached=cached)
-        if mode is not None:
-            payload["mode"] = mode_id(mode)
-        result = self._post(path, **payload)
-        return MatchHistory(result) if isinstance(result, dict) else result
+        filters = {"season": season, "mode": mode, "hero": hero,
+                   "teammate": teammate, "cached": cached, "include_rt": include_rt}
+        if limit != "all":
+            return fetch_history(self, cursor=cursor, limit=limit, **filters)
+
+        rows: dict[str, dict[str, Any]] = {}
+        sources: set[str] = set()
+        errors: list[dict[str, str]] = []
+        page_cursor = cursor
+        seen_cursors: set[str] = set()
+        primary: dict[str, Any] = {}
+        while True:
+            page = fetch_history(self, cursor=page_cursor, limit=None, **filters)
+            primary = page.to_dict()
+            for match in page.matches:
+                row = match.to_dict()
+                match_id = row.get("match_uid")
+                if match_id is not None:
+                    rows.setdefault(str(match_id), row)
+            metadata = page.get("provider_metadata", {})
+            sources.update(metadata.get("sources", []))
+            errors.extend(metadata.get("errors", []))
+            next_cursor = page.get("next_cursor")
+            if not next_cursor or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(next_cursor)
+            page_cursor = next_cursor
+
+        ordered = sorted(rows.values(), key=lambda row: timestamp(row.get("timestamp")), reverse=True)
+        result = MatchHistory({**primary, "matches": ordered, "next_cursor": None,
+                               "has_more": False, "source": "combined" if include_rt else "rivalsdata",
+                               "provider_metadata": {"sources": sorted(sources), "errors": errors,
+                                                     "scope": {key: value for key, value in filters.items()
+                                                               if value is not None},
+                                                     "ordering": "descending"}})
+        if cursor is None:
+            cache_key = (self.uid, season, mode, str(hero) if hero is not None else None,
+                         str(teammate) if teammate is not None else None, cached)
+            self._client._match_history_cache.pop(cache_key, None)
+            self._client._match_history_cache[cache_key] = {
+                "matches": [row.to_dict() for row in result.matches],
+                "sources": sorted(sources), "complete": not errors,
+            }
+            while len(self._client._match_history_cache) > 16:
+                self._client._match_history_cache.pop(next(iter(self._client._match_history_cache)))
+        return result
 
     def iter(self, **filters: Any):
-        """Iterate history until all providers are exhausted (including empty pages)."""
-        cursor = filters.pop("cursor", None)
-        while True:
-            page = self.fetch(cursor=cursor, **filters)
-            yield from page.matches
-            next_cursor = page.get("next_cursor")
-            if not next_cursor or next_cursor == cursor:
-                break
-            cursor = next_cursor
+        """Iterate all history after fetching every available page."""
+        yield from self.fetch(limit="all", **filters).matches
+
+    def fetch_win_rate(
+        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
+        season: int | None = None, mode: str | None = None,
+        hero: str | int | None = None, teammate: str | int | None = None,
+        cached: bool = True,
+    ) -> DataModel:
+        """Estimate from provider stats, calculate from full history, or use cached history.
+
+        ``estimate`` is fast and averages the current competitive win rates
+        reported by RivalsData and RivalsTracker. ``exact`` traverses all
+        matching history pages. ``cached`` performs no requests and requires a
+        prior complete, unfiltered ``fetch(limit="all")`` on this client.
+        """
+        if method not in ("estimate", "exact", "cached"):
+            raise ValueError("method must be estimate, exact, or cached")
+        if method == "estimate":
+            if hero is not None or teammate is not None or mode not in (None, "competitive"):
+                raise ValueError("summary estimates support competitive overall only; use method='exact'")
+            return self._estimated_overall_win_rate(season=season)
+        if method == "cached":
+            rows, entry = self._cached_history(season=season, mode=mode, hero=hero,
+                                               teammate=teammate, cached=cached)
+            result = self._calculate_match_rate(rows)
+            result.update({"method": "cached", "sources": entry["sources"],
+                           "cache_complete": entry["complete"]})
+            return DataModel(result)
+
+        history = self.fetch(limit="all", season=season, mode=mode, hero=hero,
+                             teammate=teammate, cached=cached)
+        result = self._calculate_match_rate([row.to_dict() for row in history.matches])
+        result.update({"method": "exact", "sources": history.provider_metadata.get("sources", []),
+                       "provider_errors": history.provider_metadata.get("errors", []),
+                       "scope": {"season": season, "mode": mode, "hero": hero,
+                                 "teammate": teammate}})
+        return DataModel(result)
+
+    def _estimated_overall_win_rate(self, *, season: int | None = None) -> DataModel:
+        client = self._client
+        error_start = len(client.provider_errors)
+        errors = []
+        try:
+            profile = self._post("/player")
+        except RivalsDataError as exc:
+            profile = {}
+            errors.append({"source": "rivalsdata", "error": str(exc)})
+        ranks = profile.get("rank_game_season", {}) if isinstance(profile, dict) else {}
+        rank_rows = [(str(key), value) for key, value in ranks.items()
+                     if str(key).startswith("1001") and isinstance(value, dict)]
+        target_season = season
+        if target_season is None and rank_rows:
+            target_season = max(rank_rows, key=lambda item: int(item[1].get("rank_game_id", 0)))[1].get("rank_game_id")
+        rd_row = next((row for key, row in rank_rows
+                       if str(row.get("rank_game_id", key.removeprefix("1001"))) == str(target_season)), None)
+        rates = []
+        if rd_row:
+            rate = self._rate_from_counts(rd_row.get("battle_count"), rd_row.get("win_count"))
+            if rate is not None:
+                rates.append({"source": "rivalsdata", "matches": rd_row.get("battle_count"),
+                              "wins": rd_row.get("win_count"), "win_rate_pct": rate})
+        body = client._rt_player(self.uid, target_season)
+        stats = body.get("stats", {}) if isinstance(body, dict) else {}
+        rate = self._rate_from_counts(stats.get("ranked_matches"), stats.get("ranked_matches_wins"))
+        if rate is not None:
+            rates.append({"source": "rivalstracker", "matches": stats.get("ranked_matches"),
+                          "wins": stats.get("ranked_matches_wins"), "win_rate_pct": rate})
+        errors.extend(client.provider_errors[error_start:])
+        values = [row["win_rate_pct"] for row in rates]
+        mean = sum(values) / len(values) if values else None
+        return DataModel({"win_rate": round(mean) if mean is not None else None,
+                          "win_rate_pct": round(mean, 2) if mean is not None else None,
+                          "method": "estimate",
+                          "estimate_method": "unweighted_mean_of_available_provider_rates",
+                          "matches": None, "known_results": None,
+                          "provider_rates": rates, "sources": [row["source"] for row in rates],
+                          "provider_errors": errors,
+                          "scope": {"season": target_season, "mode": "competitive"},
+                          "exact": False})
+
+    @staticmethod
+    def _rate_from_counts(games: Any, wins: Any) -> float | None:
+        if (isinstance(games, (int, float)) and not isinstance(games, bool)
+                and isinstance(wins, (int, float)) and not isinstance(wins, bool)
+                and games > 0 and 0 <= wins <= games):
+            return round(100 * wins / games, 2)
+        return None
+
+    @staticmethod
+    def _calculate_match_rate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        unique = {str(row["match_uid"]): row for row in rows if row.get("match_uid") is not None}
+        wins = losses = unknown = 0
+        for row in unique.values():
+            outcome = row.get("is_win")
+            if outcome is True or outcome == 1:
+                wins += 1
+            elif outcome is False or outcome == 0:
+                losses += 1
+            else:
+                camp, winner = row.get("camp"), row.get("winner_camp")
+                if camp is not None and winner is not None and str(camp) == str(winner):
+                    wins += 1
+                elif camp is not None and winner is not None:
+                    losses += 1
+                else:
+                    unknown += 1
+        known = wins + losses
+        return {"wins": wins, "losses": losses, "matches": len(unique),
+                "known_results": known, "unknown_results": unknown,
+                "win_rate": round(wins * 100 / known) if known else None,
+                "win_rate_pct": round(wins * 100 / known, 2) if known else None,
+                "deduplicated": True,
+                "basis": "unique match IDs; wins / (wins + losses) * 100"}
+
+    def _cached_history(self, *, season=None, mode=None, hero=None, teammate=None,
+                        cached=True):
+        requested = (self.uid, season, mode, str(hero) if hero is not None else None,
+                     str(teammate) if teammate is not None else None, cached)
+        entry = (self._client._match_history_cache.get((self.uid, None, None, None, None, cached))
+                 or self._client._match_history_cache.get(requested))
+        if entry is None:
+            raise ValueError("No complete match history is cached; call matches.fetch(limit='all') first")
+        if teammate is not None:
+            raise ValueError("Cached history summaries cannot verify teammate membership")
+        rows = self._select_cached_rows(entry["matches"], season=season, mode=mode, hero=hero)
+        return rows, entry
+
+    def _select_cached_rows(self, rows, *, season=None, mode=None, hero=None):
+        selected = rows
+        if season is not None:
+            selected = [row for row in selected if str(row.get("season")) == str(season)]
+        if mode is not None:
+            identifier = mode_id(mode)
+            selected = [row for row in selected if str(row.get("game_mode_id")) == str(identifier)]
+        if hero is not None:
+            identifier = int(hero) if str(hero).isdecimal() else hero_id(str(hero))
+            selected = [row for row in selected if str(row.get("hero_id")) == str(identifier)]
+        return selected
+
+    def fetch_hero_win_rates(
+        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
+        season: int | Literal["all"] | None = None,
+        mode: Literal["competitive", "quickplay"] = "competitive",
+    ) -> DataModel:
+        """Get per-hero rates from provider summaries, exact matches, or cached history."""
+        if method == "estimate":
+            return self._estimated_character_rates(mode=mode, season=season, group="hero")
+        rows, sources, errors = self._history_for_character_rates(
+            method=method, season=season, mode=mode)
+        stats = self._character_match_rates(rows, group="hero", exact=method == "exact")
+        return DataModel({**stats, "method": method, "sources": sources,
+                          "provider_errors": errors, "scope": {"season": season, "mode": mode}})
+
+    def fetch_class_win_rates(
+        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
+        season: int | Literal["all"] | None = None,
+        mode: Literal["competitive", "quickplay"] = "competitive",
+    ) -> DataModel:
+        """Get per-class rates by the hero with the most play time in each match."""
+        if method == "estimate":
+            return self._estimated_character_rates(mode=mode, season=season, group="class")
+        rows, sources, errors = self._history_for_character_rates(
+            method=method, season=season, mode=mode)
+        stats = self._character_match_rates(rows, group="class", exact=method == "exact")
+        return DataModel({**stats, "method": method, "sources": sources,
+                          "provider_errors": errors, "scope": {"season": season, "mode": mode}})
+
+    def _history_for_character_rates(self, *, method, season, mode):
+        if method == "exact":
+            history = self.fetch(limit="all", season=season, mode=mode)
+            return ([row.to_dict() for row in history.matches],
+                    history.provider_metadata.get("sources", []),
+                    history.provider_metadata.get("errors", []))
+        if method != "cached":
+            raise ValueError("method must be estimate, exact, or cached")
+        rows, entry = self._cached_history(season=season, mode=mode)
+        return rows, entry["sources"], []
+
+    def _estimated_character_rates(self, *, mode, season, group):
+        if mode not in ("competitive", "quickplay"):
+            raise ValueError("mode must be competitive or quickplay")
+        client = self._client
+        error_start = len(client.provider_errors)
+        errors = []
+        season_id = -1 if season == "all" else season
+        payload = {"season": season_id} if season_id is not None else {}
+        sources: dict[str, dict[str, dict[str, float]]] = {}
+        try:
+            rows = self._post("/player/stats/heroes", **payload)
+        except RivalsDataError as exc:
+            rows = []
+            errors.append({"source": "rivalsdata", "error": str(exc)})
+        rd: dict[str, dict[str, float]] = {}
+        for row in rows:
+            hero = row.get("hero_id")
+            stat = row.get(mode)
+            if hero is None or not isinstance(stat, dict):
+                continue
+            games, wins = stat.get("games", stat.get("matches")), stat.get("wins")
+            if self._rate_from_counts(games, wins) is not None:
+                rd[str(hero)] = {"matches": float(games), "wins": float(wins)}
+        if rd:
+            sources["rivalsdata"] = rd
+
+        body = client._rt_player(self.uid, season_id) if season_id != -1 else None
+        rt_key = "heroes_ranked" if mode == "competitive" else "heroes_unranked"
+        rt_map = (body or {}).get(rt_key, {})
+        rt: dict[str, dict[str, float]] = {}
+        for hero, stat in rt_map.items():
+            games, wins = stat.get("matches"), stat.get("win")
+            if self._rate_from_counts(games, wins) is not None:
+                rt[str(hero)] = {"matches": float(games), "wins": float(wins)}
+        if rt:
+            sources["rivalstracker"] = rt
+        errors.extend(client.provider_errors[error_start:])
+
+        if group == "hero":
+            grouped: dict[str, dict[str, Any]] = {}
+            for source, heroes in sources.items():
+                for hero, counts in heroes.items():
+                    record = grouped.setdefault(hero, {"hero_id": int(hero), "providers": []})
+                    rate = self._rate_from_counts(counts["matches"], counts["wins"])
+                    record["providers"].append({"source": source, **counts,
+                                                 "win_rate_pct": rate})
+            data = []
+            for record in grouped.values():
+                rates = [row["win_rate_pct"] for row in record["providers"]]
+                mean = sum(rates) / len(rates) if rates else None
+                data.append({"hero_id": record["hero_id"], "hero_name": hero_name(record["hero_id"]),
+                             "player_class": hero_class(record["hero_id"]),
+                             "provider_rates": record["providers"],
+                             "win_rate": round(mean) if mean is not None else None,
+                             "win_rate_pct": round(mean, 2) if mean is not None else None})
+            data.sort(key=lambda row: row["hero_id"])
+            return DataModel({"data": data, "method": "estimate",
+                              "estimate_method": "unweighted_mean_of_available_provider_rates",
+                              "sources": sorted(sources), "provider_errors": errors,
+                              "scope": {"season": season, "mode": mode},
+                              "counts_basis": "provider hero-participation summaries",
+                              "exact": False})
+
+        by_source: dict[str, dict[str, dict[str, float]]] = {}
+        for source, heroes in sources.items():
+            grouped_classes: dict[str, dict[str, float]] = {}
+            for hero, counts in heroes.items():
+                name = hero_class(int(hero))
+                if name is None:
+                    continue
+                total = grouped_classes.setdefault(name, {"matches": 0.0, "wins": 0.0})
+                total["matches"] += counts["matches"]
+                total["wins"] += counts["wins"]
+            by_source[source] = grouped_classes
+        class_names = sorted({name for groups in by_source.values() for name in groups})
+        data = []
+        for name in class_names:
+            provider_rates = []
+            for source, groups in by_source.items():
+                counts = groups.get(name)
+                if counts:
+                    provider_rates.append({"source": source, **counts,
+                                           "win_rate_pct": self._rate_from_counts(
+                                               counts["matches"], counts["wins"])})
+            rates = [row["win_rate_pct"] for row in provider_rates]
+            mean = sum(rates) / len(rates) if rates else None
+            data.append({"player_class": name, "provider_rates": provider_rates,
+                         "win_rate": round(mean) if mean is not None else None,
+                         "win_rate_pct": round(mean, 2) if mean is not None else None})
+        return DataModel({"data": data, "method": "estimate",
+                          "estimate_method": "unweighted_mean_of_provider_class_rates",
+                          "sources": sorted(sources), "provider_errors": errors,
+                          "scope": {"season": season, "mode": mode},
+                          "counts_basis": "summed hero participation; one provider-level rate per class",
+                          "exact": False})
+
+    def _character_match_rates(self, rows, *, group, exact):
+        aggregated: dict[str, dict[str, Any]] = {}
+        errors = []
+        details_loaded = fallbacks = unknown_result = 0
+        for row in rows:
+            match_id = row.get("match_uid")
+            if match_id is None:
+                continue
+            detail = self._client._match_detail_cache.get(str(match_id))
+            if detail is None and exact:
+                error_start = len(self._client.provider_errors)
+                try:
+                    detail = self._client.matches.get(match_id).to_dict()
+                    details_loaded += 1
+                except RivalsDataError as exc:
+                    errors.append({"match_uid": str(match_id), "error": str(exc)})
+                errors.extend(self._client.provider_errors[error_start:])
+            selected_hero = self._most_played_hero(detail, self.uid) if detail else None
+            if selected_hero is None:
+                selected_hero = row.get("hero_id")
+                if selected_hero is not None:
+                    fallbacks += 1
+            try:
+                identifier = int(selected_hero)
+            except (TypeError, ValueError):
+                continue
+            class_name = hero_class(identifier)
+            key = str(identifier) if group == "hero" else class_name
+            if key is None:
+                continue
+            item = aggregated.setdefault(key, {"hero_id": identifier if group == "hero" else None,
+                                               "player_class": class_name,
+                                               "matches": 0, "wins": 0, "losses": 0,
+                                               "unknown_results": 0, "heroes": set()})
+            item["matches"] += 1
+            item["heroes"].add(identifier)
+            outcome = row.get("is_win")
+            if outcome is True or outcome == 1:
+                item["wins"] += 1
+            elif outcome is False or outcome == 0:
+                item["losses"] += 1
+            else:
+                item["unknown_results"] += 1
+                unknown_result += 1
+        data = []
+        for key, item in aggregated.items():
+            known = item["wins"] + item["losses"]
+            item["win_rate"] = round(item["wins"] * 100 / known) if known else None
+            item["win_rate_pct"] = round(item["wins"] * 100 / known, 2) if known else None
+            item["hero_ids"] = sorted(item.pop("heroes"))
+            if group == "hero":
+                item["hero_name"] = hero_name(item["hero_id"])
+            data.append(item)
+        data.sort(key=lambda row: (-row["matches"], row.get("hero_id") or 0))
+        return {"data": data, "matches_analyzed": len(rows),
+                "details_loaded": details_loaded, "summary_hero_fallbacks": fallbacks,
+                "unknown_results": unknown_result,
+                "attribution_rule": "hero with maximum per-match play_time; falls back to match-history hero_id",
+                "provider_errors": errors}
+
+    @staticmethod
+    def _most_played_hero(detail, uid):
+        teams = detail.get("teams", []) if isinstance(detail, dict) else []
+        teams = list(teams.values()) if isinstance(teams, dict) else teams
+        for team in teams:
+            players = team.get("players", [])
+            players = list(players.values()) if isinstance(players, dict) else players
+            for player in players:
+                if str(player.get("player_uid", player.get("uid", ""))) != str(uid):
+                    continue
+                heroes = player.get("heroes", player.get("player_heroes", []))
+                heroes = list(heroes.values()) if isinstance(heroes, dict) else heroes
+                timed = [hero for hero in heroes if isinstance(hero.get("play_time"), (int, float))]
+                if timed:
+                    return max(timed, key=lambda hero: hero["play_time"]).get("hero_id")
+                return player.get("top_hero_id")
+        return None
 
 
 class PlayerLiveGame(PlayerResource):
@@ -617,6 +998,9 @@ class Matches:
         self._client = client
 
     def get(self, match_id: str | int) -> Match:
+        cached = self._client._match_detail_cache.get(str(match_id))
+        if cached is not None:
+            return Match(cached)
         try:
             result = self._client._post_json("/match", {"match_id": str(match_id)})
             if getattr(self._client, "enrich", False) and isinstance(result, dict):
@@ -638,4 +1022,8 @@ class Matches:
                 result = merge_match(result, tracker_match(tracker), "tracker")
             if not result.get("match_uid"):
                 raise RivalsDataError("No provider returned this match")
+        if isinstance(result, dict) and result.get("match_uid"):
+            self._client._match_detail_cache[str(match_id)] = result
+            while len(self._client._match_detail_cache) > 500:
+                self._client._match_detail_cache.pop(next(iter(self._client._match_detail_cache)))
         return Match(result) if isinstance(result, dict) else result

@@ -13,12 +13,14 @@ PREFIX = "rivals:v1:"
 
 
 def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
-                  teammate=None, cached=True):
+                  teammate=None, cached=True, limit=None, include_rt=True):
     mode = mode_id(mode)
     scope = {"uid": resource.uid, "season": season, "mode": mode,
              "hero": str(hero) if hero is not None else None,
-             "teammate": str(teammate) if teammate is not None else None, "cached": cached}
-    state = {"rd": cursor, "rt": 0, "rd_done": False, "rt_done": False, "seen": []}
+             "teammate": str(teammate) if teammate is not None else None,
+             "cached": cached, "include_rt": include_rt}
+    state = {"rd": cursor, "rt": 0, "rd_done": False,
+             "rt_done": not include_rt, "seen": [], "pending": []}
     if cursor and cursor.startswith(PREFIX):
         try:
             if len(cursor) > 1_000_000:
@@ -28,17 +30,24 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                 raise ValueError("cursor filters do not match the request")
             state = decoded["state"]
             if (not isinstance(state["rt"], int) or state["rt"] < 0
-                    or not isinstance(state["seen"], list)):
+                    or not isinstance(state["seen"], list)
+                    or not isinstance(state.get("pending", []), list)):
                 raise ValueError("invalid cursor state")
+            state.setdefault("pending", [])
         except (ValueError, KeyError, TypeError) as exc:
             raise ValueError("Invalid history cursor or changed filters") from exc
     seen = set(state["seen"])
-    rows = {}
+    rows = {str(row["match_uid"]): row for row in state.pop("pending", [])
+            if isinstance(row, dict) and row.get("match_uid") is not None}
     errors = []
     primary = {}
     successes = 0
     sources = []
-    if not state["rd_done"]:
+    for row in rows.values():
+        sources.extend(source for source in row.get("provider_metadata", {}).get("sources", [])
+                       if source not in sources)
+
+    if (limit is None or len(rows) < limit) and not state["rd_done"]:
         payload = {"cursor": state["rd"], **{k: v for k, v in {
             "season": season, "mode": mode, "hero": hero, "teammate": teammate}.items()
             if v is not None}}
@@ -86,11 +95,11 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
             errors.append({"source": "rivalsdata", "error": str(exc)})
             # The failing source can be retried by starting a new traversal.
             state["rd_done"] = True
-    if teammate is not None:
+    if include_rt and teammate is not None:
         # RT does not expose this filter, and summary rows cannot verify it.
         state["rt_done"] = True
         errors.append({"source": "rivalstracker", "error": "teammate filter unsupported"})
-    if not state["rt_done"]:
+    if include_rt and (limit is None or len(rows) < limit) and not state["rt_done"] and teammate is None:
         # Skip duplicate-only RT pages so callers don't mistake an empty page
         # for the end of the federated history. Work remains bounded per call.
         for _ in range(10):
@@ -128,11 +137,17 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
     if not successes and errors and not seen:
         raise RivalsDataHTTPError("No provider could return match history: " + str(errors))
     result = sorted(rows.values(), key=lambda r: timestamp(r.get("timestamp")), reverse=True)
-    state["seen"] = sorted(seen | set(rows))
-    more = not (state["rd_done"] and state["rt_done"])
+    if limit is not None and len(result) > limit:
+        emitted, pending = result[:limit], result[limit:]
+    else:
+        emitted, pending = result, []
+    state["pending"] = pending
+    state["seen"] = sorted(seen | {str(row["match_uid"]) for row in emitted
+                                   if row.get("match_uid") is not None})
+    more = bool(pending) or not (state["rd_done"] and state["rt_done"])
     next_cursor = PREFIX + base64.urlsafe_b64encode(json.dumps(
         {"scope": scope, "state": state}, separators=(",", ":")).encode()).decode() if more else None
-    return MatchHistory({**primary, "matches": result, "next_cursor": next_cursor,
+    return MatchHistory({**primary, "matches": emitted, "next_cursor": next_cursor,
                          "has_more": more, "source": "combined",
                          "provider_metadata": {"sources": sources, "errors": errors, "scope": scope,
                                                "ordering": "descending_within_page"}})

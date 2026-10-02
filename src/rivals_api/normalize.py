@@ -190,7 +190,9 @@ def rt_profile(body: dict) -> dict:
 def rt_history(row: dict) -> dict:
     player = row.get("match_player", {})
     dynamic = player.get("dynamic_fields", {})
-    scores = row.get("dynamic_fields", {}).get("score_info", {})
+    # RivalsTracker may explicitly return score_info=null when a match has no
+    # team-score data. Treat that the same as an omitted score object.
+    scores = (row.get("dynamic_fields") or {}).get("score_info") or {}
     camp = player.get("camp")
     return {"match_uid": row.get("match_uid"), "game_mode_id": row.get("game_mode_id"),
             "season": int(row["match_season"]) if str(row.get("match_season", "")).isdigit() else None,

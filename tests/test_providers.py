@@ -74,7 +74,7 @@ def test_merge_preserves_originals_records_conflicts_and_joins_by_identity(captu
 def test_history_private_primary_falls_back_custom(client, monkeypatch, captured):
     monkeypatch.setattr(client, "_post_json", lambda *a, **k: (_ for _ in ()).throw(PrivacyError("private")))
     monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: captured["rt_custom_history"])
-    result = PlayerMatches(client, 691218686).fetch(mode="custom", season=20)
+    result = PlayerMatches(client, 691218686).fetch(limit=100, mode="custom", season=20)
     assert len(result.matches) == 3
     assert all(m.game_mode_id == 3 and isinstance(m.is_win, bool) for m in result.matches)
     assert result.next_cursor is None
@@ -92,21 +92,21 @@ def test_federated_cursor_deduplicates_across_pages_and_binds_filters(client, mo
     monkeypatch.setattr(client, "_post_json", lambda *a: {
         "matches": [{"match_uid": "0", "kills": 900, "season": 20, "game_mode_id": 3}], "next_cursor": None})
     resource = PlayerMatches(client, 123)
-    first = resource.fetch(mode="custom", season=20)
+    first = resource.fetch(limit=20, mode="custom", season=20)
     assert len(first.matches) == 20
     assert next(m for m in first.matches if m.match_uid == "0").kills == 900
-    second = resource.fetch(mode="custom", season=20, cursor=first.next_cursor)
+    second = resource.fetch(limit=20, mode="custom", season=20, cursor=first.next_cursor)
     assert len(second.matches) == 10
     assert {m.match_uid for m in first.matches}.isdisjoint(m.match_uid for m in second.matches)
     with pytest.raises(ValueError, match="changed filters"):
-        resource.fetch(mode="competitive", season=20, cursor=first.next_cursor)
-    third = resource.fetch(mode="custom", season=20, cursor=second.next_cursor)
+        resource.fetch(limit=20, mode="competitive", season=20, cursor=first.next_cursor)
+    third = resource.fetch(limit=20, mode="custom", season=20, cursor=second.next_cursor)
     assert third.matches == [] and third.next_cursor is None
 
 
 def test_unsupported_teammate_filter_does_not_return_unfiltered_rt(client, monkeypatch):
     monkeypatch.setattr(client, "_post_json", lambda *a: {"matches": [], "next_cursor": None})
-    assert PlayerMatches(client, 1).fetch(teammate="2").matches == []
+    assert PlayerMatches(client, 1).fetch(limit=20, teammate="2").matches == []
 
 
 def test_enrichment_failure_does_not_erase_primary_match(client, monkeypatch):
@@ -191,9 +191,9 @@ def test_legacy_opt_out_keeps_requests_and_shape(client, monkeypatch):
     calls = []
     monkeypatch.setattr(client, "_post_json", lambda p, data: calls.append((p, data)) or {
         "matches": [], "next_cursor": None})
-    result = PlayerMatches(client, 1).fetch(cached=False, mode="3")
+    result = PlayerMatches(client, 1).fetch(limit=20, cached=False, mode="3")
     assert calls == [("/player/matches", {"uid": 1, "cursor": None, "mode": 3})]
-    assert result.to_dict() == {"matches": [], "next_cursor": None}
+    assert result.matches == [] and result.next_cursor is None
 
 
 def test_reference_snapshot_packaged_and_abilities(client):
@@ -211,7 +211,7 @@ def test_uncached_filters_are_checked_even_when_provider_ignores_them(client, mo
             {"match_uid": "old", "game_mode_id": 3, "season": 19, "hero_id": 1016},
         ], "next_cursor": None})
     monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: [])
-    result = PlayerMatches(client, 1).fetch(mode="custom", hero="Loki", season=20, cached=False)
+    result = PlayerMatches(client, 1).fetch(limit=20, mode="custom", hero="Loki", season=20, cached=False)
     assert [m.match_uid for m in result.matches] == ["custom"]
     assert calls[0]["hero"] == 1016 and calls[0]["mode"] == 3
 
@@ -226,7 +226,7 @@ def test_uncached_teammate_filter_requires_same_team(client, monkeypatch):
         {"camp": 1, "players": [{"uid": 3}]}] if uid == "same" else [
         {"camp": 0, "players": [{"uid": 1}]},
         {"camp": 1, "players": [{"uid": 2}]}]}))
-    result = PlayerMatches(client, 1).fetch(teammate="2", cached=False)
+    result = PlayerMatches(client, 1).fetch(limit=20, teammate="2", cached=False)
     assert [m.match_uid for m in result.matches] == ["same"]
 
 
