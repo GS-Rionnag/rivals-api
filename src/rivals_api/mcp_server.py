@@ -622,9 +622,13 @@ def get_public_insight(kind: str = "xp", cursor: str | None = None,
 
 
 @mcp.tool()
-def get_match(match_id: str) -> Any:
-    """Get the public details and player statistics for a match ID."""
-    return _call(lambda client, value: client.matches.get(value), match_id)
+def get_match(match_id: str, refresh: bool = False) -> Any:
+    """Get combined typed match details and stats, with source conflicts/errors.
+
+    Set refresh to bypass detail/provider read caches. This does not submit an
+    upstream refresh request or guarantee complete in-game data.
+    """
+    return _call(lambda client, value: client.matches.get(value, refresh=refresh), match_id)
 
 
 @mcp.tool()

@@ -184,6 +184,8 @@ def test_transport_privacy_rate_limit_cache_and_write_guard(client, monkeypatch)
     first["players"].append(9)
     assert transport.request("/player/2")["players"] == [1]
     assert len(calls) == 1
+    assert transport.request("/player/2", refresh=True)["players"] == [1]
+    assert len(calls) == 2
 
 
 def test_legacy_opt_out_keeps_requests_and_shape(client, monkeypatch):
@@ -238,9 +240,10 @@ def test_mcp_exposes_additions_and_keeps_existing_history_arguments():
     from rivalsdata.mcp_server import mcp
 
     tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
-    assert len(tools) == 43
     assert {"get_match", "get_player_stats", "get_player_encounters",
-            "get_player_rank_history", "get_player_crosshairs", "get_community_crosshairs"} <= tools.keys()
+            "get_player_rank_history", "get_player_crosshairs", "get_community_crosshairs",
+            "get_player_win_rate", "get_player_hero_win_rates", "get_player_class_win_rates"} <= tools.keys()
     properties = tools["get_player_matches"].inputSchema["properties"]
     assert {"uid_or_name", "cursor", "season", "mode", "hero", "teammate", "cached"} <= properties.keys()
     assert properties["cached"]["default"] is True
+    assert tools["get_match"].inputSchema["properties"]["refresh"]["default"] is False

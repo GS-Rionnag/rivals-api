@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
+from .game_ids import (
+    GAME_MODES,
+    MAPS,
+    MODE_SIX,
+    PLATFORM_ALIASES,
+    PLATFORMS,
+    SEASONS,
+    numeric_id,
+    rank_label,
+)
 from .hero_ids import hero_name
 
 if TYPE_CHECKING:
+    from .client import RivalsClient
     from .resources import (
         PlayerCrosshairs,
         PlayerHeroes,
@@ -133,8 +145,126 @@ class DataModel(Mapping[str, Any]):
         return f"{type(self).__name__}({keys})"
 
 
+def _reference_label(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    label = value.strip()
+    if label.lower() in ("", "-", "unknown", "unknown map", "unknown game mode", "unknown gameplay mode", "n/a"):
+        return None
+    return label if not label.isdecimal() else None
+
+
+class NamedReference(DataModel):
+    """A readable game identifier: format as its name, inspect its ``id``."""
+
+    id: int | str | None
+    name: str
+    is_known: bool
+    source: str | None
+
+    def __init__(self, identifier: int | str | None, name: str | None, *,
+                 kind: str, source: str | None = None, **values: Any) -> None:
+        label = _reference_label(name)
+        super().__init__(id=identifier, name=label or f"Unknown {kind}",
+                         is_known=bool(label), source=source, **values)
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.name!r})"
+
+
+class Map(NamedReference):
+    """A map variant, its specific name, location and objective label."""
+
+    location: str | None
+    gameplay_name: str | None
+
+    @property
+    def gameplay_mode(self) -> GameplayMode:
+        return GameplayMode(None, self.gameplay_name, map_id=self.id)
+
+    def __init__(self, identifier: int | str | None, name: str | None = None) -> None:
+        name = _reference_label(name)
+        entry = MAPS.get(str(numeric_id(identifier)), {})
+        super().__init__(identifier, name or entry.get("name"), kind="map",
+                         source="provider" if name else entry.get("source"),
+                         location=entry.get("location"), gameplay_name=entry.get("gameplay_name"))
+
+
+class GameMode(NamedReference):
+    """The queue type, for example Competitive or Custom."""
+
+    def __init__(self, identifier: int | str | None, name: str | None = None, *,
+                 source: str | None = None) -> None:
+        name = _reference_label(name)
+        code = numeric_id(identifier)
+        label = name or (MODE_SIX.get(source) if code == 6 else GAME_MODES.get(code))
+        super().__init__(identifier, label, kind="game mode", source=source or "provider catalog",
+                         alternatives=MODE_SIX if code == 6 else {})
+
+
+class GameplayMode(NamedReference):
+    """A map objective; the retained gameplay ID is scoped to this match."""
+
+    map_id: int | str | None
+
+    def __init__(self, identifier: int | str | None, name: str | None = None, *,
+                 map_id: int | str | None = None) -> None:
+        name = _reference_label(name)
+        entry = MAPS.get(str(numeric_id(map_id)), {})
+        super().__init__(identifier, name or entry.get("gameplay_name"), kind="gameplay mode",
+                         source="provider" if name else entry.get("source"), map_id=map_id)
+
+
+class Platform(NamedReference):
+    def __init__(self, identifier: int | str | None) -> None:
+        code = numeric_id(identifier)
+        if code is None and isinstance(identifier, str):
+            code = PLATFORM_ALIASES.get(identifier.lower())
+        super().__init__(identifier, PLATFORMS.get(code), kind="platform", source="rivalstracker catalog")
+
+
+class Rank(NamedReference):
+    tier: str | None
+    division: int | None
+
+    def __init__(self, identifier: int | str | None) -> None:
+        name, tier, division = rank_label(identifier)
+        super().__init__(identifier, name, kind="rank", source="provider catalog", tier=tier, division=division)
+
+
+class Season(NamedReference):
+    title: str | None
+    short_name: str | None
+
+    def __init__(self, identifier: int | str | None) -> None:
+        entry = SEASONS.get(str(numeric_id(identifier)), {})
+        super().__init__(identifier, entry.get("name"), kind="season", source="tracker catalog",
+                         title=entry.get("title"), short_name=entry.get("short_name"))
+
+
+def _add_context_references(model: DataModel) -> None:
+    """Attach conveniences without replacing filterable raw numeric fields."""
+    for original, alias, cls in (("rank_level", "rank_info", Rank),
+                                 ("season", "season_info", Season),
+                                 ("os", "platform_info", Platform),
+                                 ("login_os", "platform_info", Platform)):
+        if model._data.get(original) is not None:
+            model._data[alias] = cls(model._data[original])
+
+
 class StatRecord(DataModel):
     """A stats row with a normalized integer ``win_rate`` convenience."""
+
+    rank_info: Rank | None
+    season_info: Season | None
+    platform_info: Platform | None
+
+    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+        super().__init__(data, **values)
+        _add_context_references(self)
 
 
 class Character(StatRecord):
@@ -169,7 +299,19 @@ class Character(StatRecord):
     bond_id: int | None
     solos: int | None
     accuracy: float | None
+    accuracy_percent: float | None
+    session_hit_rate: float | None
     crit_accuracy: float | int | None
+
+    id: int | str | None
+
+    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+        super().__init__(data, **values)
+        self._data["id"] = self._data.get("hero_id", self._data.get("id"))
+        self._data["name"] = self._data.get("name") or self.hero_name or "Unknown hero"
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class MatchPlayer(StatRecord):
@@ -190,10 +332,15 @@ class MatchPlayer(StatRecord):
     is_win: bool | None
     camp: int | None
     final_hits: int | None
-    damage: int | None
+    damage: int | float | None
     blocked: int | None
-    healing: int | None
+    healing: int | float | None
     accuracy: float | None
+    accuracy_percent: float | None
+    session_hit_rate: float | None
+    damage_taken: int | float | None
+    tracker_account_id: str | None
+    provider_metadata: DataModel
     top_hero_id: int | None
     rank_level: int | None
     rank_score: float | None
@@ -206,7 +353,7 @@ class MatchPlayer(StatRecord):
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)
-        for key in ("hero", "character"):
+        for key in ("hero", "character", "top_hero"):
             value = self._data.get(key)
             if isinstance(value, Mapping):
                 self._data[key] = Character(value)
@@ -214,6 +361,21 @@ class MatchPlayer(StatRecord):
         if isinstance(heroes, list):
             target = "heroes" if "heroes" in self._data else "top_heroes"
             self._data[target] = [Character(row) if isinstance(row, Mapping) else row for row in heroes]
+        for field, alias in (("hero_id", "hero"), ("top_hero_id", "top_hero")):
+            identifier = self._data.get(field)
+            if identifier is not None and self._data.get(alias) is None:
+                candidates = self._data.get("heroes", self._data.get("top_heroes", []))
+                self._data[alias] = next((h for h in candidates if isinstance(h, Character)
+                                         and str(h.id) == str(identifier)), Character(hero_id=identifier))
+        if self._data.get("hero") is None and self._data.get("top_hero") is not None:
+            self._data["hero"] = self._data["top_hero"]
+        self._data["id"] = self._data.get("uid", self._data.get("player_uid"))
+
+    id: int | str | None
+    top_hero: Character | None
+
+    def __str__(self) -> str:
+        return self._data.get("name") or "Unknown player"
 
 
 class MatchTeam(DataModel):
@@ -226,6 +388,18 @@ class MatchTeam(DataModel):
     is_win: bool | None
     round_score: int | None
     players: list[MatchPlayer] | dict[str, MatchPlayer]
+
+    @property
+    def id(self) -> int | str | None:
+        return self._data.get("camp", self._data.get("team_id", self._data.get("side")))
+
+    @property
+    def name(self) -> str:
+        code = numeric_id(self.id)
+        return f"Team {code + 1}" if code in (0, 1) else "Unknown team"
+
+    def __str__(self) -> str:
+        return self.name
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)
@@ -252,19 +426,38 @@ class DraftEntry(DataModel):
     hero_id: int
     is_pick: bool
     round_idx: int
+    hero: Character | None
+    team: MatchTeam | None
+
+    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+        super().__init__(data, **values)
+        identifier = self._data.get("hero_id")
+        self._data["hero"] = Character(hero_id=identifier) if identifier is not None else None
+        camp = self._data.get("battle_side")
+        self._data["team"] = MatchTeam(camp=camp) if camp is not None else None
 
 
 class Match(DataModel):
-    """A match detail record, with typed teams and player entries."""
+    """A history row or full match, with lazy details and typed participants."""
+
+    __slots__ = ("_client",)
 
     match_uid: str | int | None
     replay_id: str | int | None
     winner_camp: int | str | None
-    duration_seconds: int | None
+    duration_seconds: int | float | None
     map_id: int | str | None
     game_mode_id: int | str | None
     game_play_mode_id: int | str | None
-    platform: int | str | None
+    map: Map | None
+    game_mode: GameMode | None
+    gameplay_mode: GameplayMode | None
+    game_play_mode: GameplayMode | None
+    platform: Platform | None
+    platform_id: int | str | None
+    hero: Character | None
+    rank: Rank | None
+    season_info: Season | None
     timestamp: int | str | None
     draft: list[DraftEntry] | dict[str, DraftEntry] | None
     teams: list[MatchTeam] | dict[str, MatchTeam] | None
@@ -274,10 +467,57 @@ class Match(DataModel):
     rank_level: int | None
     rank_score: float | None
     team_score: TeamScore | None
+    provider_metadata: DataModel
+
+    @property
+    def id(self) -> str | int | None:
+        return self._data.get("match_uid")
+
+    @property
+    def result(self) -> str | None:
+        if numeric_id(self._data.get("winner_camp")) == 12:
+            return "Draw"
+        return {True: "Victory", False: "Defeat"}.get(self._data.get("is_win"))
+
+    @property
+    def winner(self) -> MatchTeam | None:
+        camp = self._data.get("winner_camp")
+        if numeric_id(camp) not in (0, 1):
+            return None
+        teams = self._data.get("teams") or []
+        teams = teams.values() if isinstance(teams, Mapping) else teams
+        return next((team for team in teams if isinstance(team, MatchTeam)
+                     and str(team.id) == str(camp)), MatchTeam(camp=camp))
 
 
-    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+    def __init__(self, data: Mapping[str, Any] | None = None, *,
+                 client: RivalsClient | None = None, **values: Any) -> None:
         super().__init__(data, **values)
+        object.__setattr__(self, "_client", client)
+        _add_context_references(self)
+        map_id = self._data.get("map_id")
+        map_name = self._data.get("map_name")
+        self._data["map"] = Map(map_id, map_name) if map_id is not None or map_name else None
+        mode_id = self._data.get("game_mode_id")
+        mode_name = self._data.get("game_mode_name")
+        metadata = self._data.get("provider_metadata") or {}
+        selected = metadata.get("selections", {}).get("game_mode_id", {})
+        sources = metadata.get("sources") or []
+        source = selected.get("source") or (sources[0] if sources else None)
+        self._data["game_mode"] = GameMode(mode_id, mode_name, source=source) if mode_id is not None or mode_name else None
+        gameplay_id = self._data.get("game_play_mode_id")
+        gameplay_name = self._data.get("map_mode_name")
+        self._data["gameplay_mode"] = GameplayMode(gameplay_id, gameplay_name, map_id=map_id) if (
+            gameplay_id is not None or gameplay_name or map_id is not None) else None
+        self._data["game_play_mode"] = self._data["gameplay_mode"]
+        platform = self._data.get("platform_id", self._data.get("platform"))
+        if isinstance(platform, Mapping):
+            platform = platform.get("id")
+        self._data["platform_id"] = platform
+        self._data["platform"] = Platform(platform) if platform is not None else None
+        self._data["rank"] = self._data.get("rank_info")
+        hero = self._data.get("hero_id")
+        self._data["hero"] = Character(hero_id=hero) if hero is not None else None
         if isinstance(self._data.get("team_score"), Mapping):
             self._data["team_score"] = TeamScore(self._data["team_score"])
         for key in ("teams", "draft"):
@@ -292,6 +532,43 @@ class Match(DataModel):
                     for name, row in value.items()
                 }
 
+    def get_details(self, *, refresh: bool = False) -> Match:
+        """Fetch combined details through this match's originating client.
+
+        Returns a new Match without changing the history row. Use within the
+        originating client's lifetime; refresh bypasses the detail cache.
+        """
+        identifier = self._data.get("match_uid")
+        if identifier is None or not str(identifier).strip():
+            raise ValueError("This match has no match_uid")
+        if self._client is None:
+            raise RuntimeError(
+                "This match is not attached to a client; use client.matches.get(match.match_uid)"
+            )
+        details = self._client.matches.get(identifier, refresh=refresh)
+        # Some detail providers omit map/queue context that their history
+        # includes. Retain those same-match facts without changing the cache
+        # or overriding anything reported by the detail response.
+        context = {key: value for key in ("map_id", "map_name", "map_mode_name", "game_mode_id",
+                                          "game_play_mode_id", "platform", "season")
+                   if (value := self._raw.get(key)) is not None and details.raw.get(key) is None}
+        if not context or str(details.id) != str(identifier):
+            return details
+        data = deepcopy(details.raw)
+        data.update(context)
+        history_metadata = self._raw.get("provider_metadata") or {}
+        metadata = data.setdefault("provider_metadata", {})
+        metadata["history_context"] = {"fields": context,
+                                       "sources": history_metadata.get("sources", [])}
+        for field, value in context.items():
+            selected = history_metadata.get("selections", {}).get(field)
+            sources = history_metadata.get("sources") or []
+            if selected or sources:
+                metadata.setdefault("selections", {})[field] = deepcopy(selected) if selected else {
+                    "source": sources[0], "value": value, "confidence": "medium",
+                    "reason": "Filled missing context from the same-match history summary"}
+        return Match(data, client=self._client)
+
 
 class MatchHistory(DataModel):
     """A paginated match-history response containing typed match rows."""
@@ -300,11 +577,14 @@ class MatchHistory(DataModel):
     next_cursor: str | None
     source: str | None
 
-    def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
+    def __init__(self, data: Mapping[str, Any] | None = None, *,
+                 client: RivalsClient | None = None, **values: Any) -> None:
         super().__init__(data, **values)
         rows = self._data.get("matches")
         if isinstance(rows, list):
-            self._data["matches"] = [Match(row) if isinstance(row, Mapping) else row for row in rows]
+            self._data["matches"] = [
+                Match(row, client=client) if isinstance(row, Mapping) else row for row in rows
+            ]
 
 
 # Endpoint-specific public API records. Unknown keys stay accessible through
@@ -915,12 +1195,14 @@ class Player(DataModel):
     status: PlayerStatus | None
     rank_game_season: dict[str, RankRecord] | None
     leaderboard: dict[str, RankRecord] | None
+    platform_info: Platform | None
     match_history_is_visible: int | bool | None
 
     __slots__ = ("_client",)
 
     def __init__(self, data: Mapping[str, Any], client: Any) -> None:
         super().__init__(data)
+        _add_context_references(self)
         object.__setattr__(self, "_client", client)
         faction = self._data.get("faction")
         if isinstance(faction, Mapping):

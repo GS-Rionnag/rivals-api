@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.0.0 — 2026-10-02
+
+This release changes `match.platform` from a scalar to a typed `Platform`.
+Use `match.platform.id` or `match.platform_id` for the previous numeric value.
+Serialized matches now contain a structured `platform` and readable reference
+objects alongside legacy numeric fields. See `docs/GAME_REFERENCES.md` for
+migration details.
+
+- Added readable typed map, queue, gameplay, platform, rank, season, and hero
+  references to match/history models, including nested participants and draft
+  entries. Names resolve offline; unknown IDs remain explicit. Map 1288 now
+  formats as Hell's Heaven, with its Hydra Charteris Base location accessible.
+  `match.platform` is now a Platform object; use `.platform_id` for its scalar.
+  Serialized responses include structured reference objects alongside legacy IDs.
+- Lazy details retain missing same-match context from their originating history
+  row, with sources recorded in `provider_metadata.history_context`.
+- Added lazy `Match.get_details(refresh=False)` to typed history rows from both
+  providers, bounded/all fetches, and iteration. It returns a new typed full
+  match through the same combined fetcher as `client.matches.get(...)`.
+- Match details preserve raw provider responses, failures, completeness,
+  per-field provenance, and unresolved conflicts. They add provider-only roster
+  entries and hero segments while retaining ambiguous identities separately;
+  responses for a different match are rejected.
+- Separated `session_hit_rate` from accuracy. Added `accuracy_percent` for
+  player/hero percentage access, preserving RD's legacy player-percentage and
+  hero-ratio `accuracy` fields. Unusable accuracy is missing.
+- Scoped shared detail caches by enrichment mode and isolated returned objects.
+  Partial details retry on lookup; `refresh=True` bypasses both detail and
+  provider response caches. MCP `get_match` also accepts `refresh`.
+
 ## 2.1.0 — 2026-10-02
 
 - `player.matches.fetch` now requires `limit`: pass a positive integer for a

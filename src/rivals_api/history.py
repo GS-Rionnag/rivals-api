@@ -150,4 +150,4 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
     return MatchHistory({**primary, "matches": emitted, "next_cursor": next_cursor,
                          "has_more": more, "source": "combined",
                          "provider_metadata": {"sources": sources, "errors": errors, "scope": scope,
-                                               "ordering": "descending_within_page"}})
+                                               "ordering": "descending_within_page"}}, client=resource._client)

@@ -33,14 +33,14 @@ class ProviderTransport:
             self._browser_context = self._page = None
 
     def request(self, path: str, *, params: dict | None = None,
-                payload: dict | None = None) -> Any:
+                payload: dict | None = None, refresh: bool = False) -> Any:
         # POST is only used for the provider's read-only name search.
         if payload is not None and (self.name != "rivalstracker" or path != "/find-player"):
             raise ValueError("Only read-only provider requests are supported")
         params = {k: v for k, v in (params or {}).items() if v is not None}
         key = json.dumps([path, params, payload], sort_keys=True)
         cached = self._cache.get(key)
-        if cached and time.monotonic() - cached[0] < self.owner.provider_cache_ttl:
+        if cached and not refresh and time.monotonic() - cached[0] < self.owner.provider_cache_ttl:
             return deepcopy(cached[1])
         try:
             if payload is None:

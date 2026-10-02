@@ -224,6 +224,65 @@ records. For example, `rd.matches.get(match_id)` returns a `Match`,
 `player.matches.fetch(limit=...)` returns a `MatchHistory`. The required limit
 is either a positive number (bounded fetch with a resumable cursor) or
 `"all"` (fetch every available page); both combine and deduplicate providers.
+Each history row is a client-bound `Match`. Call `get_details()` while its
+client is open to lazily fetch combined RivalsData, RivalsTracker, and Tracker.gg
+details, including typed teams, players, and hero segments:
+
+```python
+with RivalsClient(use_browser_fallback=True) as client:
+    player = client.get_player(1970288503)
+    history = player.matches.fetch(limit=20)
+    if history.matches:
+        match = history.matches[0]
+        details = match.get_details()  # Match; the history row stays unchanged
+        for team in details.teams:
+            for participant in team.players:
+                print(participant.name, participant.get("accuracy_percent"))
+        print(details.provider_metadata.errors)
+        # match.get_details(refresh=True) bypasses detail/provider caches.
+```
+
+`client.matches.get(match_id, refresh=False)` uses the same fetcher. Provider
+outages return available details with errors; conflicts and field selections
+remain in `provider_metadata`. `accuracy_percent` uses percent units for players
+and heroes. The legacy RD `accuracy` field remains a player percentage or a
+hero ratio; `session_hit_rate` is separate and is never substituted for accuracy.
+Unknown/NaN accuracy is unavailable. See the
+[match detail guide](docs/PROVIDER_INTEGRATION.md#combined-match-details).
+
+History and detail matches also expose readable typed references. They format
+as names in bot messages; use `.name` for a plain string and `.id` for the
+original identifier. For a match with map ID `1288`, mode `3`, and platform `1`:
+
+```python
+print(match.map)                # Hell's Heaven
+print(match.map.name)           # Hell's Heaven (str)
+print(match.map.id)             # 1288
+print(match.map.location)       # Hydra Charteris Base
+print(match.game_mode)          # Custom
+print(match.gameplay_mode)      # Domination
+print(match.platform)           # PC
+print(match.hero)               # Named Character, when history includes a hero
+print(match.rank)               # Named Rank, when a rank level is available
+print(match.season_info)        # Named Season, when a season is available
+```
+
+These are objects with `__str__`, so `f"Played on {match.map}"` prints the map
+name while `match.map.id` remains available. `game_play_mode` aliases
+`gameplay_mode`. Participants expose `hero`, `top_hero`, `rank_info`, and
+`platform_info`; draft entries expose `hero` and `team`. Existing Character
+records now have `.id`, `.name`, and name-based string formatting.
+
+**Migration:** `match.platform` is now a `Platform` object. Use
+`match.platform_id` or `match.platform.id` for its previous numeric value.
+`to_dict()` serializes references as `{id, name, is_known, source, ...}` objects;
+the original `map_id`, `game_mode_id`, and other numeric fields remain present.
+`.raw` preserves the input payload. The packaged catalogs resolve names
+without additional network requests. Unmapped codes produce an explicit
+`Unknown ...` reference with `is_known=False`; absent fields return `None`.
+See [readable match references](docs/GAME_REFERENCES.md) for mapping sources
+and gameplay-code limits.
+
 The overall, hero, and class win-rate methods accept `method="estimate"` (the
 default), `"exact"`, or `"cached"`. Overall estimates average available
 RivalsData/RivalsTracker competitive rates; hero estimates average each

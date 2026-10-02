@@ -28,6 +28,57 @@ with RivalsClient(use_browser_fallback=True) as client:
 - Tracker hero participation counts may be fractional. Raw stat keys/display labels are retained. `totalDamageTaken` is never silently relabeled as the client's `blocked` statistic; RT's opaque `last_kill` is preserved under its source key.
 - Provider response caches are independent and close with the client. The calculated-history cache is shared within the Python process (bounded to 16 history sets and 500 match details), so `method="cached"` can reuse a prior full-history query across client instances. A full fetch that had provider errors is still cached, but its result records incomplete coverage; cached calculations make no requests to fill gaps. Browser contexts are reused during a client lifetime and close on exit. Use the synchronous client on the thread that created its browser context.
 
+## Combined match details
+
+Every `Match` returned by `player.matches.fetch(limit=...)` or
+`player.matches.iter(...)` carries its originating client. Call
+`match.get_details()` inside that client's context to lazily return a **new**
+`Match` with typed `MatchTeam`, `MatchPlayer`, and `Character` records. Fetching
+history makes no eager detail requests. `client.matches.get(match_id)` and MCP
+`get_match(match_id)` use the same combined fetcher. With `enrich=False`, it
+requests only RivalsData; the public methods are otherwise identical.
+
+The fetcher validates the returned match ID before accepting each response.
+RivalsData and RivalsTracker players merge by numeric game UID. Tracker account
+UUIDs remain separate: a cross-provider bridge requires a unique exact player
+name and matching team within the same match. Ambiguous identities stay in
+`provider_metadata.unmatched_players` and the raw responses; they cannot vote
+on another player's stats. Missing roster entries and hero segments are added
+when their identities can be resolved. Hero segments match by hero ID within
+their verified player. Team and hero row order is never used for identity.
+
+`participant.accuracy_percent` and `hero.accuracy_percent` use percentage units.
+Legacy RD `participant.accuracy` remains a percentage, and `hero.accuracy` remains
+a ratio. These have provider-specific formulas; unit normalization does not
+establish that player and hero accuracy measure the same thing. RT/Tracker
+`session_hit_rate` remains a separate ratio and never fills a missing accuracy.
+Invalid, non-finite, or out-of-range accuracy values become unavailable. Damage
+taken remains separate from damage blocked. Tracker's original stat keys and
+display metadata remain under `tracker_stats`.
+
+`provider_metadata` includes:
+
+- `sources`, `evidence`, `selections`, `observations`, and `conflicts` on the
+  match and each merged player/hero record. Completed details outrank incomplete
+  data; comparable source agreement may resolve a discrepancy. A two-source tie
+  remains uncertain and keeps its alternatives. Agreement is not in-game proof.
+- `responses`: accepted original payloads keyed by source, without transport
+  credentials. Non-finite raw numbers are represented as text for valid JSON.
+- `errors`: provider failures and rejected responses for this lookup.
+- `completeness`: whether player details exist, which provider records have
+  completion evidence, whether all requested reads succeeded, and the number
+  of unmatched players. This is not a guarantee of a complete in-game roster.
+- `fetched_at`: lookup time, not the provider's data freshness.
+
+Provider failures retain successful details; all providers failing raises a
+typed error. Partial results remain in the process-level calculation cache but
+are retried on subsequent detail lookups. Completed results are cached by
+match ID **and enrichment mode**; cached objects are copied before returning.
+Pass `refresh=True` to `match.get_details()`, `client.matches.get(...)`, or MCP
+`get_match` to bypass the detail and provider response caches. This performs
+read requests, not an upstream refresh-queue mutation. Manually constructed
+unbound matches require `client.matches.get(match.match_uid)` instead.
+
 ## Existing functions with additions
 
 | Function | Addition |

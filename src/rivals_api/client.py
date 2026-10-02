@@ -35,9 +35,8 @@ from .resources import (
     TeamUps,
 )
 
-
 _MATCH_HISTORY_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
-_MATCH_DETAIL_CACHE: dict[str, dict[str, Any]] = {}
+_MATCH_DETAIL_CACHE: dict[tuple[str, bool], dict[str, Any]] = {}
 
 
 class RivalsClient:

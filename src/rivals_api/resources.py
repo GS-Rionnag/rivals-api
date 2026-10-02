@@ -42,7 +42,7 @@ from .models import (
 from .models import (
     PlayerPunishments as PlayerPunishmentsModel,
 )
-from .normalize import merge, merge_match, mode_id, rt_match, timestamp, tracker_match
+from .normalize import merge, mode_id, timestamp
 
 
 def _one(value: Any, model: type[DataModel] = DataModel) -> Any:
@@ -540,7 +540,7 @@ class PlayerMatches(PlayerResource):
                                "provider_metadata": {"sources": sorted(sources), "errors": errors,
                                                      "scope": {key: value for key, value in filters.items()
                                                                if value is not None},
-                                                     "ordering": "descending"}})
+                                                     "ordering": "descending"}}, client=self._client)
         if cursor is None:
             cache_key = (self.uid, season, mode, str(hero) if hero is not None else None,
                          str(teammate) if teammate is not None else None, cached)
@@ -837,7 +837,8 @@ class PlayerMatches(PlayerResource):
             match_id = row.get("match_uid")
             if match_id is None:
                 continue
-            detail = self._client._match_detail_cache.get(str(match_id))
+            detail = self._client._match_detail_cache.get(
+                (str(match_id), bool(self._client.enrich)))
             if detail is None and exact:
                 error_start = len(self._client.provider_errors)
                 try:
@@ -997,33 +998,8 @@ class Matches:
     def __init__(self, client: Any) -> None:
         self._client = client
 
-    def get(self, match_id: str | int) -> Match:
-        cached = self._client._match_detail_cache.get(str(match_id))
-        if cached is not None:
-            return Match(cached)
-        try:
-            result = self._client._post_json("/match", {"match_id": str(match_id)})
-            if getattr(self._client, "enrich", False) and isinstance(result, dict):
-                result.setdefault("provider_metadata", {"sources": ["rivalsdata"]})
-                result["provider_metadata"].setdefault("evidence", {})["rivalsdata"] = {
-                    "kind": "match_detail", "complete": bool(result.get("teams")),
-                    "scope": {"match_uid": str(match_id)}}
-        except RivalsDataError:
-            if not getattr(self._client, "enrich", False):
-                raise
-            result = {}
-        if getattr(self._client, "enrich", False):
-            rt = self._client._optional_provider("rt", f"/matches/{quote(str(match_id), safe='')}")
-            if rt and rt.get("match_uid"):
-                result = merge_match(result, rt_match(rt), "rivalstracker")
-            tracker = self._client._optional_provider(
-                "tracker", f"/api/v2/marvel-rivals/standard/matches/{quote(str(match_id), safe='')}")
-            if tracker and tracker.get("attributes", {}).get("id"):
-                result = merge_match(result, tracker_match(tracker), "tracker")
-            if not result.get("match_uid"):
-                raise RivalsDataError("No provider returned this match")
-        if isinstance(result, dict) and result.get("match_uid"):
-            self._client._match_detail_cache[str(match_id)] = result
-            while len(self._client._match_detail_cache) > 500:
-                self._client._match_detail_cache.pop(next(iter(self._client._match_detail_cache)))
-        return Match(result) if isinstance(result, dict) else result
+    def get(self, match_id: str | int, *, refresh: bool = False) -> Match:
+        """Get combined typed details; refresh bypasses client/provider caches."""
+        from .match_details import fetch_match
+
+        return fetch_match(self._client, match_id, refresh=refresh)

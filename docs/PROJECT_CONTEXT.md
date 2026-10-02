@@ -17,7 +17,7 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
 
 - Distribution: `rivals-api`; preferred import: `rivals_api`.
 - Compatibility: `rivalsdata` and `RivalsDataClient` remain aliases.
-- Version: `2.1.0`.
+- Version: `3.0.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsClient`.
@@ -66,6 +66,28 @@ proficiency, punishment and name history. Client-wide resources include match
 details, leaderboards, heroes, team-ups, insights, factions, profiles and
 favorites. New analytics and public community resources are documented in
 `docs/PROVIDER_INTEGRATION.md` and the feature-gap inventory.
+
+History rows carry their originating client and expose `match.get_details()`.
+Both bounded/all fetches and iteration return these bound `Match` objects. The
+method returns a new typed full `Match` through `client.matches.get(...)`, with
+`refresh=True` available to bypass detail/provider caches. The client reference
+is excluded from model serialization. Keep it open while fetching details.
+The shared fetcher in `match_details.py` validates provider match IDs, preserves
+raw responses and errors, merges roster/hero records by identity, and exposes
+per-field source decisions and completeness. Ambiguous player bridges remain
+unmatched. Accuracy percent is distinct from session hit rate; raw RD hero
+accuracy retains ratio units. Detail caches are scoped to the enrichment setting;
+partial cached evidence remains usable for request-free calculations but is
+retried by detail lookups.
+
+Match models resolve map, queue, gameplay, platform, rank, season, and hero
+references offline from packaged provider catalogs. References format as names
+and expose `.id`; the original numeric fields remain except `match.platform`,
+which is a typed Platform with `.platform_id` providing the previous scalar.
+Gameplay labels come from the map/objective context rather than guessing a
+global interpretation of `game_play_mode_id`. Unknown codes stay explicit.
+The catalog covers 118 map variants and 20 observed seasons; source evidence
+and serialization/migration details are in `docs/GAME_REFERENCES.md`.
 
 The MCP server exposes read-only tools over stdio or Streamable HTTP. It does
 not implement authentication; remote deployments must supply an authenticated

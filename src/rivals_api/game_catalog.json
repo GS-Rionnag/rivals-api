@@ -1,0 +1,815 @@
+{
+  "checked_at": "2026-10-02",
+  "maps": {
+    "1032": {
+      "name": "Yggdrasill Path",
+      "location": "Yggsgard",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1034": {
+      "name": "Shin-Shibuya",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1101": {
+      "name": "Hall of Djalia",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1118": {
+      "name": "Sanctum Sanctorum",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Doom Match",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1148": {
+      "name": "Spider-Islands",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1154": {
+      "name": "Odin's Archive",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1155": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1156": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1161": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1162": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1169": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1170": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1201": {
+      "name": "Midtown",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1217": {
+      "name": "Central Park",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1230": {
+      "name": "Shin-Shibuya",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1231": {
+      "name": "Yggdrasill Path",
+      "location": "Yggsgard",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1235": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1236": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1240": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1241": {
+      "name": "Hydra Charteris Base",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Domination",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1243": {
+      "name": "Hydra Charteris Base",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1244": {
+      "name": "Hydra Charteris Base",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1245": {
+      "name": "Spider-Islands",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1246": {
+      "name": "Ninomaru",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Conquest",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1247": {
+      "name": "Practice Range",
+      "location": "Practice Range",
+      "gameplay_name": "Practice Range",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1253": {
+      "name": "Tokyo 2099",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Tutorial",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1254": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Jeff's Winter Splash Festival",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1261": {
+      "name": "Yggsgard",
+      "location": "Yggsgard",
+      "gameplay_name": "Domination Tutorial",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1262": {
+      "name": "Yggsgard",
+      "location": "Yggsgard",
+      "gameplay_name": "Convoy Tutorial",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1266": {
+      "name": "Tokyo 2099",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Hero Tutorial",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1267": {
+      "name": "Hall of Djalia",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1272": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1273": {
+      "name": "Krakoa",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1281": {
+      "name": "Krakoa",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1286": {
+      "name": "Arakko",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1287": {
+      "name": "Hell's Heaven",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1288": {
+      "name": "Hell's Heaven",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1289": {
+      "name": "Dancing Stage",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Clash of Dancing Lions",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1290": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1291": {
+      "name": "Midtown",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1292": {
+      "name": "Central Park",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1293": {
+      "name": "Empire Of Eternal Night",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Doom Match",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1294": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1295": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1296": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1302": {
+      "name": "Birnin T\u2019Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1304": {
+      "name": "Hellfire Gala",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Domination",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1307": {
+      "name": "Throne of Knull",
+      "location": "Klyntar",
+      "gameplay_name": "Resource Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1308": {
+      "name": "Yggsgard",
+      "location": "Yggsgard",
+      "gameplay_name": "Tutorial",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1309": {
+      "name": "Krakoa",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1310": {
+      "name": "Krakoa",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1311": {
+      "name": "Arakko",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1312": {
+      "name": "Ninomaru",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Giant-Size Brain Blast",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1313": {
+      "name": "Ninomaru",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Arcade",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1314": {
+      "name": "Karkoa",
+      "location": "Age Of Ultron ",
+      "gameplay_name": "Ultron's Battle Matrix Protocol",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1317": {
+      "name": "Celestial Husk",
+      "location": "Klyntar",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1318": {
+      "name": "Celestial Husk",
+      "location": "Klyntar",
+      "gameplay_name": "Domination",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1319": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Resource Rumble",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1320": {
+      "name": "Throne of Knull",
+      "location": "Klyntar",
+      "gameplay_name": "Resource Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1321": {
+      "name": "Odin's Archive",
+      "location": "Yggsgard",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1322": {
+      "name": "Ninomaru",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Conquest (Annihilation)",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1354": {
+      "name": "Times Square",
+      "location": "Times Square",
+      "gameplay_name": "Times Square",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1371": {
+      "name": "Carousel",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1373": {
+      "name": "Bifrost Garden",
+      "location": "Yggsgard",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1374": {
+      "name": "Throne Room",
+      "location": "Yggsgard",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1375": {
+      "name": "The Grove",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1376": {
+      "name": "Stellar Spaceport",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1377": {
+      "name": "Imperial Institute of Science",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1378": {
+      "name": "Celestial Codex",
+      "location": "Klyntar",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1379": {
+      "name": "Celestial Vault",
+      "location": "Klyntar",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1380": {
+      "name": "Celestial Hand",
+      "location": "Klyntar",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1381": {
+      "name": "Warrior Falls",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1382": {
+      "name": "Cradle",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1383": {
+      "name": "Eldritch Monument",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1384": {
+      "name": "Frozen Airfield",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1385": {
+      "name": "Super-Soldier Factory",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Clone Rumble",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1388": {
+      "name": "Shin-Shibuya",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1389": {
+      "name": "Spider-Islands",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1391": {
+      "name": "Birnin T'Challa",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1392": {
+      "name": "Hell's Heaven",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1393": {
+      "name": "Symbiotic Surface",
+      "location": "Klyntar",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1394": {
+      "name": "Midtown",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1395": {
+      "name": "Central Park",
+      "location": "Empire Of Eternal Night",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1396": {
+      "name": "Krakoa",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1397": {
+      "name": "Arakko",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1398": {
+      "name": "Celestial Husk",
+      "location": "Klyntar",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1399": {
+      "name": "Grand Garden",
+      "location": "Grand Garden",
+      "gameplay_name": "18 Vs. 18 Annihilation",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1400": {
+      "name": "Yggdrasill Path",
+      "location": "Yggsgard",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1401": {
+      "name": "Royal Palace",
+      "location": "Yggsgard",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1402": {
+      "name": "Hall of Djalia",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1403": {
+      "name": "Midtown",
+      "location": "Midtown",
+      "gameplay_name": "Marvel Zombies",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1404": {
+      "name": "Heart of Heaven",
+      "location": "K'Un-Lun",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1405": {
+      "name": "Midtown",
+      "location": "Midtown",
+      "gameplay_name": "Marvel Zombies",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1406": {
+      "name": "Museum Of Contemplation",
+      "location": "Museum Of Contemplation",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1408": {
+      "name": "Jeffland",
+      "location": "Jeffland",
+      "gameplay_name": "Jeff'S Winter Splash Festival",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1410": {
+      "name": "Lower Manhattan",
+      "location": "Lower Manhattan",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1411": {
+      "name": "Manhattan",
+      "location": "Lower Manhattan",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1413": {
+      "name": "Museum",
+      "location": "Museum Of Contemplation",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1417": {
+      "name": "Thebes",
+      "location": "Thebes",
+      "gameplay_name": "Free Fight",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1418": {
+      "name": "Museum",
+      "location": "Museum Of Contemplation",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1420": {
+      "name": "Thebes",
+      "location": "Thebes",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1421": {
+      "name": "Manhattan",
+      "location": "Lower Manhattan",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1422": {
+      "name": "Blood Hunt",
+      "location": "Blood Hunt",
+      "gameplay_name": "Blood Hunt",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1424": {
+      "name": "Blood Hunt",
+      "location": "Blood Hunt",
+      "gameplay_name": "Blood Hunt",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1425": {
+      "name": "Yggsgard",
+      "location": "Yggsgard",
+      "gameplay_name": "Path To Doomsday: The Avengers",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1426": {
+      "name": "Intergalactic Empire Of Wakanda",
+      "location": "Intergalactic Empire Of Wakanda",
+      "gameplay_name": "Path To Doomsday: The Avengers",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1427": {
+      "name": "Hydra Charteris Base",
+      "location": "Hydra Charteris Base",
+      "gameplay_name": "Path To Doomsday: The Avengers",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1428": {
+      "name": "Klyntar",
+      "location": "Klyntar",
+      "gameplay_name": "Path To Doomsday: The Avengers",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1429": {
+      "name": "Hellfire Gala",
+      "location": "Hellfire Gala",
+      "gameplay_name": "Path To Doomsday: The Avengers",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "1434": {
+      "name": "Thebes",
+      "location": "Thebes",
+      "gameplay_name": "Convoy",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "1435": {
+      "name": "Path To Doomsday",
+      "location": "Path To Doomsday",
+      "gameplay_name": "Avengers: Age Of Ultron",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "2041": {
+      "name": "Heart of Heaven",
+      "location": "K'Un-Lun",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "2042": {
+      "name": "Heart of Heaven",
+      "location": "K'Un-Lun",
+      "gameplay_name": "Convergence",
+      "source": "https://rivalsdata.com/assets/matches-BtVAubcc.js"
+    },
+    "2081": {
+      "name": "Alchemax Headquarters",
+      "location": "Alchemax Headquarters",
+      "gameplay_name": "Doom Match",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "2082": {
+      "name": "Alchemax Headquarters",
+      "location": "Alchemax Headquarters",
+      "gameplay_name": "Doom Match",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "2100": {
+      "name": "Tokyo 2099",
+      "location": "Tokyo 2099",
+      "gameplay_name": "Performance Test",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "2101": {
+      "name": "K'Un-Lun",
+      "location": "K'Un-Lun",
+      "gameplay_name": "Bounty Annihilation (18 Vs. 18)",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    },
+    "2110": {
+      "name": "Times Square",
+      "location": "Times Square",
+      "gameplay_name": "Hellfire Bay Beach",
+      "source": "https://rivalstracker.com/_nuxt/CUE0zxkU.js"
+    }
+  },
+  "seasons": {
+    "20": {
+      "name": "Season 10",
+      "title": "S10: Butcher's Blasphemy",
+      "short_name": "S10"
+    },
+    "19": {
+      "name": "Season 9.5",
+      "title": "S9.5: The Mystery of Thebes",
+      "short_name": "S9.5"
+    },
+    "18": {
+      "name": "Season 9",
+      "title": "S9: The Mystery of Thebes",
+      "short_name": "S9"
+    },
+    "17": {
+      "name": "Season 8.5",
+      "title": "S8.5: Sins of Alchemax",
+      "short_name": "S8.5"
+    },
+    "16": {
+      "name": "Season 8",
+      "title": "S8: Sins of Alchemax",
+      "short_name": "S8"
+    },
+    "15": {
+      "name": "Season 7.5",
+      "title": "S7.5: The Hunt is On",
+      "short_name": "S7.5"
+    },
+    "14": {
+      "name": "Season 7",
+      "title": "S7: The Hunt is On",
+      "short_name": "S7"
+    },
+    "13": {
+      "name": "Season 6.5",
+      "title": "S6.5: Night at the Museum",
+      "short_name": "S6.5"
+    },
+    "12": {
+      "name": "Season 6",
+      "title": "S6: Night at the Museum",
+      "short_name": "S6"
+    },
+    "11": {
+      "name": "Season 5.5",
+      "title": "S5.5: Love is a Battlefield",
+      "short_name": "S5.5"
+    },
+    "10": {
+      "name": "Season 5",
+      "title": "S5: Love is a Battlefield",
+      "short_name": "S5"
+    },
+    "9": {
+      "name": "Season 4.5",
+      "title": "S4.5: Heart of the Dragon",
+      "short_name": "S4.5"
+    },
+    "8": {
+      "name": "Season 4",
+      "title": "S4: Heart of the Dragon",
+      "short_name": "S4"
+    },
+    "7": {
+      "name": "Season 3.5",
+      "title": "S3.5: The Abyss Awakens",
+      "short_name": "S3.5"
+    },
+    "6": {
+      "name": "Season 3",
+      "title": "S3: The Abyss Awakens",
+      "short_name": "S3"
+    },
+    "5": {
+      "name": "Season 2.5",
+      "title": "S2.5: Hellfire Gala",
+      "short_name": "S2.5"
+    },
+    "4": {
+      "name": "Season 2",
+      "title": "S2: Hellfire Gala",
+      "short_name": "S2"
+    },
+    "3": {
+      "name": "Season 1.5",
+      "title": "S1.5: Eternal Night Falls",
+      "short_name": "S1.5"
+    },
+    "2": {
+      "name": "Season 1",
+      "title": "S1: Eternal Night Falls",
+      "short_name": "S1"
+    },
+    "1": {
+      "name": "Season 0",
+      "title": "S0: Dooms' Rise",
+      "short_name": "S0"
+    }
+  }
+}

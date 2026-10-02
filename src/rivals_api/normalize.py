@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -195,6 +196,7 @@ def rt_history(row: dict) -> dict:
     scores = (row.get("dynamic_fields") or {}).get("score_info") or {}
     camp = player.get("camp")
     return {"match_uid": row.get("match_uid"), "game_mode_id": row.get("game_mode_id"),
+            "game_play_mode_id": row.get("game_play_mode_id"), "platform": row.get("platform"),
             "season": int(row["match_season"]) if str(row.get("match_season", "")).isdigit() else None,
             "timestamp": row.get("match_time_stamp"), "map_id": row.get("match_map_id"),
             "duration_seconds": row.get("match_play_duration"),
@@ -225,17 +227,87 @@ def rt_match(body: dict) -> dict:
                "kills": player.get("k"), "deaths": player.get("d"), "assists": player.get("a"),
                "damage": player.get("total_hero_damage"), "healing": player.get("total_hero_heal"),
                "damage_taken": player.get("total_damage_taken"),
-               "accuracy": player.get("session_hit_rate"), "solo_kills": player.get("solo_kill"),
+               "session_hit_rate": _rate(player.get("session_hit_rate"), 1),
+               "solo_kills": player.get("solo_kill"),
                "last_kill": player.get("last_kill"), "heroes": heroes,
-               "is_mvp": str(body.get("mvp_uid")) == str(player["player_uid"]),
-               "is_svp": str(body.get("svp_uid")) == str(player["player_uid"])}
+               "is_mvp": str(body["mvp_uid"]) == str(player["player_uid"]) if body.get("mvp_uid") is not None else None,
+               "is_svp": str(body["svp_uid"]) == str(player["player_uid"]) if body.get("svp_uid") is not None else None}
         teams.setdefault(camp, {"camp": camp, "players": []})["players"].append(row)
-    return {"match_uid": body.get("match_uid"), "replay_id": body.get("replay_id"),
+    return _seed_match({"match_uid": body.get("match_uid"), "replay_id": body.get("replay_id"),
+            "map_id": body.get("match_map_id", body.get("map_id")),
+            "game_play_mode_id": body.get("game_play_mode_id"), "platform": body.get("platform"),
             "game_mode_id": body.get("game_mode_id"), "timestamp": body.get("match_time_stamp"),
             "duration_seconds": body.get("match_play_duration"), "teams": list(teams.values()),
             "provider_metadata": {"sources": ["rivalstracker"], "evidence": {
                 "rivalstracker": {"kind": "match_detail", "complete": bool(body.get("match_players")),
-                                     "scope": {"match_uid": body.get("match_uid")}}}}}
+                                     "scope": {"match_uid": body.get("match_uid")}}}}}, "rivalstracker")
+
+
+def _rate(value: Any, maximum: float) -> float | None:
+    """A known numeric rate; strings, non-finite and out-of-range values are missing."""
+    if (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and 0 <= value <= maximum):
+        return value
+    return None
+
+
+def _rows(value: Any) -> list[dict]:
+    return list(value.values()) if isinstance(value, dict) else list(value or [])
+
+
+def _seed_record(row: dict, source: str, context: dict) -> dict:
+    """Give fields from a newly discovered player/hero their own provenance."""
+    result = deepcopy(row)
+    metadata = result.setdefault("provider_metadata", {})
+    metadata.setdefault("sources", [source])
+    metadata.setdefault("evidence", {})[source] = deepcopy(context)
+    for key, value in row.items():
+        if key in ("provider_metadata", "teams", "heroes"):
+            continue
+        evidence = {k: v for k, v in context.items() if k != "units"}
+        if key in context.get("units", {}):
+            evidence["unit"] = context["units"][key]
+        result[key] = resolve(metadata, key, value, value, source, source, evidence, evidence)
+    metadata.setdefault("conflicts", [])
+    return result
+
+
+def _seed_match(body: dict, source: str) -> dict:
+    context = deepcopy(body["provider_metadata"]["evidence"][source])
+    context["units"] = {"accuracy": "percent", "accuracy_percent": "percent",
+                        "session_hit_rate": "ratio", "play_time": "seconds",
+                        "duration_seconds": "seconds"}
+    result = _seed_record(body, source, context)
+    for team in _rows(result.get("teams")):
+        players = []
+        for player in _rows(team.get("players")):
+            row = _seed_record(player, source, context)
+            hero_context = {**context, "units": {**context["units"], "accuracy": "ratio"}}
+            row["heroes"] = [_seed_record(h, source, hero_context)
+                             for h in _rows(player.get("heroes"))]
+            players.append(row)
+        team["players"] = players
+    return result
+
+
+def rd_match(body: dict) -> dict:
+    """Keep RD accuracy semantics: player percentages and hero ratios."""
+    result = deepcopy(body)
+    metadata = result.setdefault("provider_metadata", {})
+    metadata["sources"] = ["rivalsdata"]
+    metadata.setdefault("evidence", {})["rivalsdata"] = {
+        "kind": "match_detail", "complete": any(t.get("players") for t in _rows(result.get("teams"))),
+        "scope": {"match_uid": body.get("match_uid")}}
+    for team in _rows(result.get("teams")):
+        for player in _rows(team.get("players")):
+            if "accuracy" in player:
+                player["accuracy"] = _rate(player["accuracy"], 100)
+                player["accuracy_percent"] = player["accuracy"]
+            for hero in _rows(player.get("heroes")):
+                if "accuracy" in hero:
+                    hero["accuracy"] = _rate(hero["accuracy"], 1)
+                    hero["accuracy_percent"] = hero["accuracy"] * 100 if hero["accuracy"] is not None else None
+    return _seed_match(result, "rivalsdata")
 
 
 def tracker_stats(segment: dict) -> dict:
@@ -247,6 +319,8 @@ def tracker_stats(segment: dict) -> dict:
                "soloKills": "solo_kills", "lastKills": "final_hits",
                "kdRatio": "kd", "kdaRatio": "kda"}
     result = {aliases.get(k, k): v for k, v in values.items()}
+    if "sessionHitRate" in values:
+        result["session_hit_rate"] = _rate(values["sessionHitRate"], 1)
     # Damage Taken and the upstream display label "Damage Blocked" differ;
     # never assign this field to the existing blocked semantic.
     for key, normalized in (("timePlayed", "play_time"), ("timePlayedWon", "winning_play_time")):
@@ -271,26 +345,28 @@ def tracker_match(body: dict) -> dict:
         row = {**tracker_stats(s), "name": meta.get("platformInfo", {}).get("platformUserIdentifier"),
                "tracker_account_id": attrs.get("accountId"), "camp": camp,
                "is_mvp": meta.get("isMvp"), "is_svp": meta.get("isSvp"),
-               "is_win": meta.get("result") == "win", "party_id": meta.get("partyId"),
+               "is_win": {"win": True, "loss": False}.get(meta.get("result")),
+               "party_id": meta.get("partyId"),
                "heroes": [{**tracker_stats(h), "hero_id": h.get("attributes", {}).get("heroId")}
                           for h in segments if h.get("type") == "hero"
                           and h.get("attributes", {}).get("accountId") == attrs.get("accountId")]}
         teams.setdefault(camp, {"camp": camp, "players": []})["players"].append(row)
     meta = body.get("metadata", {})
-    return {"match_uid": body.get("attributes", {}).get("id"),
+    return _seed_match({"match_uid": body.get("attributes", {}).get("id"),
             "map_id": body.get("attributes", {}).get("mapId"),
             "duration_seconds": meta.get("duration"), "replay_id": meta.get("replayId"),
             "map_name": meta.get("mapName"), "map_mode_name": meta.get("mapModeName"),
+            "game_mode_name": meta.get("modeName"),
             "full_match_available": meta.get("fullMatchAvailable"),
             "full_match_fetched": meta.get("fullMatchFetched"), "teams": list(teams.values()),
             "provider_metadata": {"sources": ["tracker"], "evidence": {
                 "tracker": {"kind": "match_detail",
                              "complete": meta.get("fullMatchAvailable") is True and meta.get("fullMatchFetched") is True,
-                             "scope": {"match_uid": body.get("attributes", {}).get("id")}}}}}
+                             "scope": {"match_uid": body.get("attributes", {}).get("id")}}}}}, "tracker")
 
 
 def merge_match(primary: dict, extra: dict, source: str) -> dict:
-    """Merge team/player/hero rows by identity, not list position or fuzzy names."""
+    """Combine rosters by verified identity, retaining ambiguous rows separately."""
     if (primary.get("match_uid") is not None and extra.get("match_uid") is not None
             and str(primary["match_uid"]) != str(extra["match_uid"])):
         result = deepcopy(primary)
@@ -298,39 +374,60 @@ def merge_match(primary: dict, extra: dict, source: str) -> dict:
             {"source": source, "error": "Rejected details for a different match"})
         return result
     result = merge(primary, {k: v for k, v in extra.items() if k != "teams"}, source)
-    left_context = primary.get("provider_metadata", {}).get("evidence", {}).get("rivalsdata", {})
     right_context = extra.get("provider_metadata", {}).get("evidence", {}).get(source, {})
-    if not result.get("teams"):
-        result["teams"] = deepcopy(extra.get("teams", []))
-        return result
-    teams = result["teams"]
-    teams = list(teams.values()) if isinstance(teams, dict) else teams
-    candidates = [p for t in extra.get("teams", []) for p in t.get("players", [])]
+
+    def uid(row: dict) -> str | None:
+        value = row.get("player_uid") or row.get("uid")
+        return str(value) if value is not None else None
+
+    teams = _rows(result.get("teams"))
     for team in teams:
-        players = team.get("players", [])
-        players = list(players.values()) if isinstance(players, dict) else players
-        for index, player in enumerate(players):
-            uid = str(player.get("player_uid", player.get("uid", "")))
-            name = player.get("name")
-            matches = [p for p in candidates if (uid and str(p.get("player_uid", "")) == uid)
-                       or (source == "tracker" and name and p.get("name") == name)]
-            if len(matches) != 1:
+        team["players"] = _rows(team.get("players"))
+    candidates = [p for t in _rows(extra.get("teams")) for p in _rows(t.get("players"))]
+    for candidate in candidates:
+        locations = [(t, i, p) for t in teams for i, p in enumerate(t["players"])]
+        identifier, name = uid(candidate), candidate.get("name")
+        if identifier:
+            matches = [(t, i, p) for t, i, p in locations if uid(p) == identifier]
+            duplicate = sum(uid(p) == identifier for p in candidates) > 1
+        else:
+            # Tracker UUIDs are not game UIDs. Only bridge a unique exact name
+            # with a known matching team; never fuzzy-match or use list order.
+            matches = [(t, i, p) for t, i, p in locations if name and p.get("name") == name]
+            duplicate = sum(p.get("name") == name for p in candidates) > 1
+            same_team = (len(matches) == 1 and candidate.get("camp") is not None
+                         and matches[0][2].get("camp", matches[0][0].get("camp")) == candidate["camp"])
+            if matches and not same_team:
+                duplicate = True
+        if duplicate or len(matches) > 1:
+            result["provider_metadata"].setdefault("unmatched_players", []).append(
+                {"source": source, "reason": "ambiguous_player_identity", "player": deepcopy(candidate)})
+            continue
+        if not matches:
+            if not identifier and not candidate.get("tracker_account_id"):
+                result["provider_metadata"].setdefault("unmatched_players", []).append(
+                    {"source": source, "reason": "missing_player_identity", "player": deepcopy(candidate)})
                 continue
-            candidate = matches[0]
-            merged = merge(player, {k: v for k, v in candidate.items() if k != "heroes"}, source,
-                           primary_context=left_context, context=right_context)
-            heroes = deepcopy(player.get("heroes", []))
-            for hero in candidate.get("heroes", []):
-                found = next((i for i, h in enumerate(heroes)
-                              if str(h.get("hero_id")) == str(hero.get("hero_id"))), None)
-                if found is None:
-                    heroes.append(deepcopy(hero))
-                else:
-                    heroes[found] = merge(heroes[found], hero, source,
-                                          primary_context=left_context, context=right_context)
-            merged["heroes"] = heroes
-            players[index] = merged
-        team["players"] = players
+            camp = candidate.get("camp")
+            target = next((t for t in teams if camp is not None and t.get("camp") == camp), None)
+            if target is None:
+                target = {"camp": camp, "players": []}
+                teams.append(target)
+            target["players"].append(_seed_record(candidate, source, right_context))
+            continue
+        team, index, player = matches[0]
+        merged = merge(player, {k: v for k, v in candidate.items() if k != "heroes"}, source,
+                       context=right_context)
+        heroes = deepcopy(_rows(player.get("heroes")))
+        for hero in _rows(candidate.get("heroes")):
+            found = [i for i, h in enumerate(heroes) if hero.get("hero_id") is not None
+                     and str(h.get("hero_id")) == str(hero["hero_id"])]
+            if not found:
+                heroes.append(deepcopy(hero))
+            elif len(found) == 1:
+                heroes[found[0]] = merge(heroes[found[0]], hero, source)
+        merged["heroes"] = heroes
+        team["players"][index] = merged
     result["teams"] = teams
     return result
 
