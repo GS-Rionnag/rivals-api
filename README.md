@@ -1,31 +1,32 @@
-# rivalsdata-api
+# rivals-api
 
-An unofficial Python client for RivalsData's public Marvel Rivals data. It
-uses the site's undocumented API, so routes and fields can change. The client
-keeps unknown response fields accessible instead of discarding them.
+An unofficial, multi-source Python tracker for public Marvel Rivals data. It
+combines RivalsData, RivalsTracker, and Tracker.gg, keeps source disagreements
+visible, and preserves unfamiliar response fields as providers change. The
+project also includes a read-only MCP server.
 
 ## Install
 
 Python 3.10 or newer:
 
 ```console
-python -m pip install rivalsdata-api
+python -m pip install rivals-api
 ```
 
 For editable development, clone the repository and run
 `python -m pip install -e '.[dev]'`. The optional Camoufox Cloudflare fallback
-is installed with `python -m pip install 'rivalsdata-api[browser]'`, followed
+is installed with `python -m pip install 'rivals-api[browser]'`, followed
 by `python -m camoufox fetch`.
 
 ## Quick start
 
 ```python
-from rivalsdata import RivalsDataClient, hero_id, hero_name
+from rivals_api import RivalsClient, hero_id, hero_name
 
 print(hero_name(1016))  # Loki
 print(hero_id("Loki"))  # 1016
 
-with RivalsDataClient() as rd:
+with RivalsClient() as rd:
     player = rd.get_player("GS-")  # numeric UID works too
     print(player.name, player.level, player.rank_game_season)
     print(player.win_rate)  # Current-season competitive win rate
@@ -36,7 +37,7 @@ with RivalsDataClient() as rd:
     map_stats = player.stats.maps(season=20)
     match_page = player.matches.fetch(season=20)
 
-    # Current match (None if the profile is not currently in a game).
+    # Current match when its provider exposes it; Custom discovery is unsupported.
     live_game = player.live_game.fetch()
     if live_game is not None:
         print(live_game.players, live_game.team_avg_rank)
@@ -49,6 +50,11 @@ with RivalsDataClient() as rd:
 
 print(hero_season[0].win_rate)  # integer percent when wins/losses are present
 ```
+
+`RivalsDataClient` remains an alias for `RivalsClient`. The old `rivalsdata`
+import path is also retained for existing projects. To migrate an existing
+installation, uninstall `rivalsdata-api` first, then install `rivals-api`;
+this avoids the two distributions sharing the compatibility-package files.
 
 The player overview's overall win rate (`player.win_rate`) is the **current-season
 competitive win rate**. It uses the latest available competitive season with
@@ -65,7 +71,7 @@ accepts `season="all"`. Each row contains `player_class` (`tank`, `support`,
 totals for games, wins, losses, and available MVP/SVP counts.
 
 ```python
-with RivalsDataClient() as rd:
+with RivalsClient() as rd:
     player = rd.get_player("GS-")
     stats = player.stats.classes(season=20)
     all_seasons = player.stats.classes(season="all")
@@ -127,7 +133,7 @@ for the observed fields and example.
 Install the MCP extra and the package:
 
 ```console
-python -m pip install 'rivalsdata-api[mcp]'
+python -m pip install 'rivals-api[mcp]'
 ```
 
 The server exposes read-only tools for player search and profiles, a player's
@@ -136,11 +142,12 @@ leaderboards, heroes, team-ups, public insights, matches, and factions. The
 `show_player_dashboard` tool returns an MCP-UI player card with rank and
 competitive record plus one optional data section per call: current match
 roster, hero win-rate chart, or recent match form with K/D/A. This keeps each
-dashboard pull to the profile plus at most one additional endpoint. It supports
+dashboard pull to the profile plus one selected data section. Provider enrichment
+can make additional requests to compare the reported values. It supports
 local stdio for Claude Desktop
 and Streamable HTTP for remote MCP clients such as ChatGPT. Data comes from
-RivalsData's undocumented API and may change; profile match history can be
-private.
+public provider endpoints and may be incomplete, private, or stale. Live
+Custom-game discovery is not currently implemented.
 
 Known `hero_id` and `top_hero_id` fields in MCP results include corresponding
 `hero_name` and `top_hero_name` fields. The `resolve_hero` tool accepts either
@@ -174,9 +181,9 @@ installed:
 ```json
 {
   "mcpServers": {
-    "rivalsdata": {
+    "rivals-api": {
       "command": "C:\\path\\to\\venv\\Scripts\\python.exe",
-      "args": ["-m", "rivalsdata.mcp_server"]
+      "args": ["-m", "rivals_api.mcp_server"]
     }
   }
 }
@@ -190,7 +197,7 @@ after saving the configuration.
 Run the server on a host reachable over HTTPS:
 
 ```console
-uvicorn rivalsdata.mcp_server:app --host 0.0.0.0 --port 8000
+uvicorn rivals_api.mcp_server:app --host 0.0.0.0 --port 8000
 ```
 
 The MCP endpoint is `/mcp` (for example, `https://your-host.example/mcp`). Add
@@ -215,7 +222,7 @@ fields are still preserved and available through `.raw`; endpoint schemas
 that have not been observed completely are annotated only for known fields.
 
 ```python
-with RivalsDataClient() as rd:
+with RivalsClient() as rd:
     player = rd.get_player(1970288503)             # Player
     proficiency = player.proficiency.fetch()       # ProficiencyResponse
     account = next(iter(proficiency.accounts.values()))  # Proficiency
@@ -252,16 +259,31 @@ Requests use curl_cffi with a Chrome TLS profile by default. If blocked, enable
 the optional browser fallback:
 
 ```python
-with RivalsDataClient(use_browser_fallback=True) as rd:
+with RivalsClient(use_browser_fallback=True) as rd:
     player = rd.get_player(1970288503)
 ```
 
 ## Errors and contributions
 
-All package exceptions inherit from `RivalsDataError`. See
+All package exceptions inherit from `RivalsAPIError` (also exported under the
+legacy `RivalsDataError` name). See
 [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code layout, change workflow, and
 notes for new contributors. [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md)
 is the handoff document for new coding sessions.
 
-This project is not affiliated with RivalsData, NetEase, or Marvel. Keep
+This project is not affiliated with RivalsData, RivalsTracker, Tracker.gg,
+NetEase, or Marvel. Keep
 request rates reasonable and respect the site's terms.
+
+## Multi-provider data
+
+Existing functions combine public RivalsData, RivalsTracker, and Tracker.gg data with evidence-based selection of comparable values. New functions expose rank timelines, cosmetics, encounters, advanced career stats, global analytics, and community listings. Live Custom-game detection is not currently supported by the investigated public sources. See [provider integration](docs/PROVIDER_INTEGRATION.md) for examples, source semantics, and browser setup. Use `RivalsClient(enrich=False)` for RivalsData-only behavior.
+
+## Documentation
+
+- [2.0.0 release notes and migration guide](docs/CHANGELOG.md)
+- [Provider integration and data-selection rules](docs/PROVIDER_INTEGRATION.md)
+- [Research findings and unsupported features](docs/PROVIDER_FEATURE_GAPS.md)
+- [RivalsTracker API audit](docs/RIVALSTRACKER_API_AUDIT.md)
+- [Tracker.gg API audit](docs/TRACKER_NETWORK_API.md)
+- [Observed RivalsData endpoints](docs/API.md)

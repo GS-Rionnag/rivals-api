@@ -1,4 +1,4 @@
-# RivalsData API inventory
+# RivalsData provider API inventory
 
 This is an observed inventory of the public web client's API, gathered by
 reviewing the RivalsData UI and its browser requests on 2026-09-29. The upstream
@@ -42,7 +42,8 @@ and `.raw` so upstream additions are not discarded.
 | Public profile card | `GET /profiles/{uid}` | Numeric UID path parameter; `Profiles.get` resolves usernames | Object: `leaderboard_social`, `socials`, `uid`, `updated_at`. |
 | Favorites lookup | `POST /favorites` | `{"uids": [numeric_uid, ...]}` | Array of public player summaries with `aid`, `config_server`, `games`, `name`, and `status`. |
 
-The client exposes these read resources through `RivalsDataClient` and `Player`;
+The client exposes these read resources through `RivalsClient` (formerly
+`RivalsDataClient`) and `Player`;
 see README examples and method docstrings. `DataModel.win_rate` returns an
 integer percentage from a direct win-rate field, `wins`/`losses`, or the
 competitive profile row's `win_count`/`battle_count`. If the source provides

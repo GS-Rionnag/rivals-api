@@ -1,7 +1,7 @@
 import sys as _sys
 from importlib import import_module as _import_module
 
-_module = _import_module("rivals_api.resources")
+_module = _import_module("rivals_api.history")
 if __name__ == "__main__" and hasattr(_module, "main"):
     _module.main()
 else:

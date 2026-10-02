@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for helping improve rivalsdata-api. The client relies on undocumented
-RivalsData endpoints, so contributions should keep requests conservative and
-record how endpoint behavior was observed.
+Thanks for helping improve rivals-api. It combines public data from RivalsData,
+RivalsTracker, and Tracker.gg. Several routes are undocumented, so keep requests
+conservative and record how behavior and field meanings were observed.
 
 ## Development setup
 
@@ -31,23 +31,31 @@ dependencies from changing unrelated applications installed in system Python.
 
 ## Project map
 
-- `src/rivalsdata/client.py`: HTTP client, username resolution, UID lookup,
-  shared GET/POST handling, and the optional Camoufox retry.
-- `src/rivalsdata/models.py`: mapping-compatible response models and the typed
+- `src/rivals_api/client.py`: HTTP client, username resolution, UID lookup,
+  source enrichment, shared request handling, and optional Camoufox retry.
+- `src/rivals_api/providers.py`: per-provider transports, cache, and browser
+  context reuse.
+- `src/rivals_api/normalize.py`, `selection.py`: adapters, evidence and
+  cross-provider value selection.
+- `src/rivals_api/history.py`: federated history, cursor scoping and filtering.
+- `src/rivals_api/extensions.py`: extended analytics and community reads.
+- `src/rivals_api/models.py`: mapping-compatible response models and the typed
   `Player` wrapper.
-- `src/rivalsdata/resources.py`: lazy player and site-wide endpoint resources.
-- `src/rivalsdata/exceptions.py`: public exception types.
-- `src/rivalsdata/__init__.py`: package exports and version.
+- `src/rivals_api/resources.py`: lazy player and site-wide endpoint resources.
+- `src/rivals_api/exceptions.py`: public exception types.
+- `src/rivals_api/__init__.py`: package exports and version.
 - `pyproject.toml`: build backend, package metadata, runtime and optional
   dependencies.
 - `docs/API.md`: observed site sections, endpoint inventory, response samples,
   and open questions.
 - `docs/PROJECT_CONTEXT.md`: contributor and new-chat handoff notes.
+- `docs/CHANGELOG.md`: package migration and release history.
 
 ## How the client currently works
 
-The client uses curl_cffi with browser TLS impersonation against
-`https://api.rivalsdata.com`:
+The main client uses curl_cffi with browser TLS impersonation against
+`https://api.rivalsdata.com`. Optional provider transports use their respective
+public sites/APIs and maintain separate error, cache and privacy handling:
 
 - `POST /players/search` with JSON `{"name": "..."}` returns search
   suggestions. Search records include an `aid`, such as
@@ -58,6 +66,13 @@ The client uses curl_cffi with browser TLS impersonation against
   match, and player-tab endpoints. See `docs/API.md` for the current inventory.
 - If these requests are blocked and `use_browser_fallback=True`, the client
   loads RivalsData in Camoufox and retries the POST from the page context.
+- RivalsTracker and Tracker.gg enrich profile, match, history and analytics
+  methods where comparable public data is available. Their route details and
+  limitations are documented in `docs/RIVALSTRACKER_API_AUDIT.md` and
+  `docs/TRACKER_NETWORK_API.md`.
+- Merge changes must retain scope, source evidence and all alternatives. Do not
+  compare different seasons, modes, count bases or units, and do not claim that
+  a public tracker supports live Custom-game discovery without direct evidence.
 
 These are observed implementation details, not a supported RivalsData contract.
 Do not assume that `aid` formats, filters, routes, or JSON fields are permanent.
@@ -70,8 +85,8 @@ Do not assume that `aid` formats, filters, routes, or JSON fields are permanent.
 3. For endpoint changes, note the page or action that exposed the route and
    the request shape. Never commit cookies, tokens, or browser profile data.
 4. Add or update automated tests for behavior changes. Keep network-dependent
-   checks opt-in; routine tests should use mocked HTTP responses. The initial
-   repository does not yet include an automated test suite.
+   checks opt-in; routine tests should use captured fixtures and mocked HTTP
+   responses.
 5. Run the checks for the code you changed:
 
    ```console
