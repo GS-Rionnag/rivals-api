@@ -235,6 +235,16 @@ with RivalsClient() as rd:
 
 ## Public resources
 
+For a player selection list, use `rd.search_players("silo")`, or the MCP tool
+`search_players(name="silo")`. Each candidate includes a name and numeric UID;
+pass the selected UID to `get_player_profile(uid=283622404)` for their profile
+overview. `search_player_candidates` remains an alias, and `get_player` still
+accepts a UID or exact name. MCP `search_players` now returns a list instead
+of one resolved account. Live checks on 2026-10-02 confirmed that the
+candidate search includes `siloء` (UID `283622404`) when searching `silo`.
+See [the player-search audit](docs/PLAYER_SEARCH_AUDIT.md) for provider comparisons
+and exact-name versus suggestion behavior.
+
 - `rd.leaderboards.fetch(...)` — global player ranking.
 - `rd.heroes.tier_list(...)`, `.get(hero_id)`, `.meta(hero_id, range=90)`,
   `.leaderboard(hero_id, **filters)` — hero metrics and ranking.

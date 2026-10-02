@@ -76,7 +76,17 @@ The other methods on `player.analytics` and `client.analytics` are the underlyin
 
 ## MCP
 
-25 additional read-only tools are registered (42 total). They cover the new functions and the previously Python-only crosshairs, proficiency, punishments, name history, hero leaderboard, public profile and favorites. `get_player_matches` now accepts `cached=False` and mode names.
+43 read-only tools are registered. They cover the new functions and the previously Python-only crosshairs, proficiency, punishments, name history, hero leaderboard, public profile and favorites. `get_player_matches` now accepts `cached=False` and mode names.
+
+Use `search_players(name="silo")` to get a list of matching accounts, with each
+candidate's name and numeric game UID. Select an account, then call
+`get_player_profile(uid=283622404)` for its overview, including available rank,
+level and current-season competitive win rate. Search preserves provider fields
+and special characters in names. `search_player_candidates` remains an alias
+for the list search; `get_player(uid_or_name=...)` remains available for callers
+that already have a UID or an exact name. MCP `search_players` previously
+returned one resolved account; callers must now handle a list, including an
+empty list when no candidates are returned.
 
 MCP enables browser fallback by default when Camoufox is available. Set
 `RIVALS_API_BROWSER_FALLBACK=false` to disable browser launches. The former

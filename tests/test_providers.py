@@ -238,7 +238,7 @@ def test_mcp_exposes_additions_and_keeps_existing_history_arguments():
     from rivalsdata.mcp_server import mcp
 
     tools = {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
-    assert len(tools) == 42
+    assert len(tools) == 43
     assert {"get_match", "get_player_stats", "get_player_encounters",
             "get_player_rank_history", "get_player_crosshairs", "get_community_crosshairs"} <= tools.keys()
     properties = tools["get_player_matches"].inputSchema["properties"]

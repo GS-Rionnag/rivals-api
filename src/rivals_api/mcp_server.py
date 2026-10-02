@@ -39,7 +39,9 @@ mcp = FastMCP(
         "RivalsData, RivalsTracker and Tracker.gg, preserving source conflicts. "
         "New tools cover rank history, cosmetics, encounters and community data. "
         "These results come from unofficial, undocumented APIs "
-        "and can change. Use a numeric player UID or exact in-game name; player "
+        "and can change. Use search_players for a list of name matches, then "
+        "get_player_profile with the selected numeric UID. Other tools accept "
+        "a numeric player UID or exact in-game name; player "
         "match history may be private. All tools are read-only."
     ),
 )
@@ -108,9 +110,13 @@ def _call(method: Any, *args: Any, **kwargs: Any) -> Any:
 
 
 @mcp.tool()
-def search_players(name: str) -> dict[str, Any]:
-    """Find a public player by in-game name and return their numeric UID."""
-    return _call(lambda client, query: client.resolve_player(query), name)
+def search_players(name: str) -> list[dict[str, Any]]:
+    """Return matching players with their names and numeric game UIDs.
+
+    Returns candidates rather than choosing one account. Pass the selected
+    candidate's uid to get_player_profile to fetch their profile overview.
+    """
+    return _call(lambda client, query: client.search_players(query), name)
 
 
 @mcp.tool()
@@ -125,6 +131,18 @@ def get_player(uid_or_name: str) -> dict[str, Any]:
         return {**player.to_dict(), "win_rate": player.win_rate}
 
     return _call(fetch, uid_or_name)
+
+
+@mcp.tool()
+def get_player_profile(uid: int) -> dict[str, Any]:
+    """Get a public profile overview by the numeric UID from search_players.
+
+    Includes rank, level, available profile fields, and current-season
+    competitive win rate. Does not resolve a username or choose a candidate.
+    """
+    if isinstance(uid, bool) or not isinstance(uid, int) or uid <= 0:
+        raise ValueError("uid must be a positive integer")
+    return get_player(str(uid))
 
 
 @mcp.tool()
@@ -567,9 +585,9 @@ def get_faction(faction_id: str) -> Any:
 
 
 @mcp.tool()
-def search_player_candidates(name: str) -> Any:
-    """Return multiple name-search candidates with game UIDs."""
-    return _call(lambda c: c.search_players(name))
+def search_player_candidates(name: str) -> list[dict[str, Any]]:
+    """Compatibility alias for search_players: return names and game UIDs."""
+    return search_players(name)
 
 
 @mcp.tool()

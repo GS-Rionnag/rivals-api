@@ -72,6 +72,13 @@ not implement authentication; remote deployments must supply an authenticated
 gateway. The dashboard shows a snapshot and performs provider requests when a
 tool runs.
 
+MCP `search_players(name)` returns a list of RivalsTracker candidates with names
+and numeric game UIDs. `get_player_profile(uid)` retrieves the chosen profile
+by positive integer UID, including its current-season competitive win rate.
+`search_player_candidates` is an alias for the list search; the existing
+`get_player(uid_or_name)` tool remains available. The search tool previously
+resolved one account, so callers must migrate to handling list results.
+
 ## Development and release
 
 Create an isolated virtual environment and install `.[dev]`. Install

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- MCP `search_players(name)` now returns a list of matching players with names
+  and numeric game UIDs instead of automatically resolving one account. Callers
+  must handle list results, including an empty list for no matches.
+- Added MCP `get_player_profile(uid)` to fetch the selected player's overview by
+  numeric UID. `get_player(uid_or_name)` remains available, and
+  `search_player_candidates` is an alias for the list search.
+
 ## 2.0.0 — 2026-10-02
 
 This release changes the project from a RivalsData-only wrapper into **rivals-api**,
