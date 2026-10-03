@@ -50,6 +50,7 @@ dependencies from changing unrelated applications installed in system Python.
   and open questions.
 - `docs/PROJECT_CONTEXT.md`: contributor and new-chat handoff notes.
 - `docs/CHANGELOG.md`: package migration and release history.
+- `docs/RELEASING.md`: incremental release policy and version selection.
 
 ## How the client currently works
 
@@ -97,6 +98,10 @@ Do not assume that `aid` formats, filters, routes, or JSON fields are permanent.
 
 6. Update the README and project context if user-facing methods, dependencies,
    routes, or setup steps changed.
+
+For releases, follow [the release policy](docs/RELEASING.md): choose the smallest
+appropriate patch, minor, or major bump and preserve compatibility where
+practical. A normal push or documentation edit does not require a new release.
 
 There is no live API compatibility guarantee. If RivalsData changes a route,
 prefer a clear typed error over returning an empty profile or silently

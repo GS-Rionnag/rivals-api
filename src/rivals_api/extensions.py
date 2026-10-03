@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
@@ -77,7 +78,8 @@ class PlayerAnalytics:
 
     def seasons(self) -> DataModel:
         body = self.client.providers.tracker.request(self.client._tracker_path(self.uid))
-        meta = body.get("metadata", {})
+        meta = body.get("metadata") if isinstance(body, Mapping) else None
+        meta = meta if isinstance(meta, Mapping) else {}
         return response({k: meta.get(k) for k in ("seasons", "currentSeason", "defaultSeason")},
                         "tracker")
 

@@ -172,8 +172,15 @@ Unresolved disagreements, unknown outcomes and request failures are retried.
 `player.stats.classes()` groups those same assignments by class.
 `hero_win_rates()` / `class_win_rates()` return `data` plus `metadata`, retaining
 coverage even when no rows can be attributed. Mode defaults to Competitive plus Quickplay (`"all"`);
-season defaults to Tracker profile `currentSeason`. An unavailable default
-season requires an explicit numeric ID or `"all"`. All-seasons history sends
+season defaults to Tracker profile `currentSeason`, with RivalsTracker's global
+`/heroes/stats` season as a fallback when Tracker metadata is missing, invalid,
+or unavailable. Positive numeric string metadata IDs are normalized. Use
+`season="current"` to explicitly select this default, a positive integer ID for
+one season, or `season="all"` for all available seasons. If neither source can
+verify the current season, an explicit numeric ID or `"all"` is required; a
+player's latest played season and Tracker's `defaultSeason` are not evidence of
+the current global season. This resolution also applies to overall rates.
+All-seasons history sends
 no season selector, rather than the provider-summary `-1` selector.
 
 Each deduplicated match is assigned once to the unique hero with the most

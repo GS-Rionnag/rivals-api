@@ -250,7 +250,7 @@ class PlayerResource:
 class PlayerHeroes(PlayerResource):
     """Per-player hero summary rows from ``POST /player/heroes``."""
 
-    def fetch(self, *, season: int | Literal["all"] | None = None,
+    def fetch(self, *, season: int | Literal["current", "all"] | None = None,
               mode: Literal["competitive", "quickplay", "all"] = "all") -> list[HeroStatsRecord]:
         """List match-attributed heroes; all includes Competitive and Quickplay."""
         return PlayerStats(self._client, self.uid).heroes(season=season, mode=mode)
@@ -271,7 +271,7 @@ class PlayerStats(PlayerResource):
 
     def heroes(
         self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-        season: int | Literal["all"] | None = None,
+        season: int | Literal["current", "all"] | None = None,
     ) -> list[HeroStatsRecord]:
         """Canonical hero records: one result for the longest-played hero per match.
 
@@ -284,25 +284,29 @@ class PlayerStats(PlayerResource):
                 for row in result.data]
 
     def win_rate(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                 season: int | Literal["all"] | None = None) -> DataModel:
+                 season: int | Literal["current", "all"] | None = None) -> DataModel:
         """Select intact season career counts and check them against match history.
 
         Defaults to the current season and Competitive plus Quickplay. History
         fallback and unresolved provider disagreements are explicit in metadata.
+        Use a positive season ID for one season, or season="all" for all available
+        tracked seasons. season="current" explicitly selects the default season.
         """
         from .season_rates import calculate
 
         return DataModel(calculate(self, season=season, mode=mode))
 
     def hero_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                       season: int | Literal["all"] | None = None) -> DataModel:
+                       season: int | Literal["current", "all"] | None = None) -> DataModel:
+        """Hero rates for current, a positive season ID, or all tracked seasons."""
         from .attribution import calculate
 
         result = calculate(self, season=season, mode=mode)
         return DataModel({"data": result["heroes"], "metadata": result["metadata"]})
 
     def class_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                        season: int | Literal["all"] | None = None) -> DataModel:
+                        season: int | Literal["current", "all"] | None = None) -> DataModel:
+        """Class rates for current, a positive season ID, or all tracked seasons."""
         from .attribution import calculate
 
         result = calculate(self, season=season, mode=mode)
@@ -434,7 +438,7 @@ class PlayerStats(PlayerResource):
         return self.analytics.matchups(season=season)
 
     def classes(
-        self, *, season: int | Literal["all"] | None = None,
+        self, *, season: int | Literal["current", "all"] | None = None,
         mode: Literal["competitive", "quickplay", "all"] = "all",
     ) -> ClassStatsResponse:
         """Class results use each match's longest-played hero, once per match."""

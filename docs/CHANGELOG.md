@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.1.0 — 2026-10-03
+
+- Current-season statistics now fall back to RivalsTracker's global hero-stat
+  season when Tracker.gg metadata is unavailable, missing, or invalid. Numeric
+  string metadata IDs are accepted; an unverifiable current season never
+  silently becomes all-seasons data.
+- Added explicit `season="current"` to canonical overall, hero, and class
+  requests and their MCP tools. Positive provider season IDs and `season="all"`
+  remain supported, with documented examples and regression coverage.
+
 ## 4.0.0 — 2026-10-03
 
 This release changes canonical hero/class statistics from provider participation

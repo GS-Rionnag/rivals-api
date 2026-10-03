@@ -178,6 +178,11 @@ def test_overall_mcp_schema_and_default_scope(setup, monkeypatch):
     assert "method" not in schema and "cached" not in schema
     assert schema["mode"]["default"] == "all"
     assert set(schema["mode"]["enum"]) == {"all", "competitive", "quickplay"}
+    for name in ("get_player_win_rate", "get_player_hero_win_rates",
+                 "get_player_class_win_rates", "get_player_heroes", "get_player_stats"):
+        choices = tools[name].inputSchema["properties"]["season"]["anyOf"]
+        assert any(set(choice.get("enum", [])) == {"current", "all"} for choice in choices)
+        assert any(choice.get("type") == "integer" for choice in choices)
 
 
 @pytest.mark.parametrize("games,wins", [(True, 1), (1, True), (2, 3), (float('nan'), 0), (-1, 0), (1.5, 1)])
@@ -214,6 +219,33 @@ def test_all_seasons_uses_tracked_history_without_career_default_contamination(s
     assert result.games == 60 and result.metadata.scope.season == "all"
     assert result.metadata.coverage.uses_history_fallback
     assert not any(source in ("rt", "tracker") for source, _params in data["calls"])
+
+
+def test_numeric_season_keeps_career_and_history_requests_scoped(setup):
+    client, data = setup
+    result = PlayerStats(client, 691218686).win_rate(season=19, mode="competitive")
+    assert result.metadata.scope.season == 19
+    assert all(params["season"] == 19 for source, params in data["calls"]
+               if source in ("rt", "history") or source == "tracker" and params)
+    assert not any(source == "tracker" and params is None for source, params in data["calls"])
+
+
+def test_default_win_rate_survives_missing_tracker_current(setup, monkeypatch):
+    client, _data = setup
+    original_tracker = client.providers.tracker.request
+    original_rt = client.providers.rt.request
+
+    def tracker(path, *, params=None):
+        return {} if params is None else original_tracker(path, params=params)
+
+    def rt(path, *, params=None):
+        return {"season": 20} if path == "/heroes/stats" else original_rt(path, params=params)
+
+    monkeypatch.setattr(client.providers.tracker, "request", tracker)
+    monkeypatch.setattr(client.providers.rt, "request", rt)
+    result = PlayerStats(client, 691218686).win_rate(season="current")
+    assert result.metadata.scope.season == 20 and result.games == 60
+    assert not result.metadata.coverage.uses_history_fallback
 
 
 @pytest.mark.parametrize("mode", [None, "arcade", "custom", "quick-match"])

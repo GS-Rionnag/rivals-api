@@ -1,5 +1,8 @@
 """Shared season/mode boundaries for canonical player statistics."""
 
+from .exceptions import RivalsDataError
+from .game_ids import numeric_id
+
 MODES = {"competitive": 2, "quickplay": 1}
 
 
@@ -10,12 +13,29 @@ def validate_mode(mode):
 
 
 def resolve_season(resource, season):
-    if season is None:
-        season = resource.analytics.seasons().data.get("currentSeason")
-        if not isinstance(season, int) or isinstance(season, bool) or season < 1:
-            raise ValueError("Cannot verify the current season; supply a season ID or 'all'")
+    if season is None or season == "current":
+        errors = []
+        # Current season is global, not the latest season this player played.
+        # Do not use defaultSeason, maximum player history, or a static catalog.
+        try:
+            current = numeric_id(resource.analytics.seasons().data.get("currentSeason"))
+            if current is not None and current > 0:
+                return current
+            errors.append("Tracker currentSeason is missing or invalid")
+        except RivalsDataError as exc:
+            errors.append(f"Tracker: {exc}")
+        try:
+            body = resource._client.providers.rt.request("/heroes/stats")
+            current = numeric_id(body.get("season")) if isinstance(body, dict) else None
+            if current is not None and current > 0:
+                return current
+            errors.append("RivalsTracker global season is missing or invalid")
+        except RivalsDataError as exc:
+            errors.append(f"RivalsTracker: {exc}")
+        raise ValueError("Cannot verify the current season; supply a positive season ID "
+                         "or season='all'. " + "; ".join(errors))
     if season != "all" and (isinstance(season, bool) or not isinstance(season, int) or season < 1):
-        raise ValueError("season must be a positive ID or 'all'")
+        raise ValueError("season must be a positive ID, 'current', or 'all'")
     return season
 
 

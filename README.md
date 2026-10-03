@@ -69,6 +69,29 @@ and other queues are excluded. Omitted season resolves the current season;
 a numeric season selects that season. `season="all"` is a separate selector
 for all available seasons.
 
+Use the same season selector for overall, hero, and class data:
+
+```python
+current = player.stats.win_rate(season="current")  # Same as omitting season
+one_season = player.stats.win_rate(season=20)      # Provider ID, not display number
+all_seasons = player.stats.win_rate(season="all")
+season_heroes = player.stats.hero_win_rates(season=20)
+season_classes = player.stats.class_win_rates(season=20)
+all_heroes = player.stats.hero_win_rates(season="all")
+all_classes = player.stats.class_win_rates(season="all")
+catalog = player.analytics.seasons()  # Maps provider IDs to season display names
+```
+
+MCP `get_player_win_rate`, `get_player_hero_win_rates`,
+`get_player_class_win_rates`, and `get_player_heroes` accept these same selectors.
+Mode is independent of season and still defaults to `"all"`.
+Current-season detection tries Tracker.gg's `currentSeason`, then RivalsTracker's
+global hero-stat season if Tracker metadata is unavailable. If neither can
+verify it, supply a known positive season ID or explicitly request `"all"`.
+The client never silently changes a current-season request to all seasons.
+All-seasons calculations cover available tracked history; they do not promise
+complete lifetime coverage.
+
 ```python
 rate = player.stats.win_rate()  # Current season, Competitive plus Quickplay
 ranked = player.stats.win_rate(mode="competitive")

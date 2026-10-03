@@ -17,7 +17,7 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
 
 - Distribution: `rivals-api`; preferred import: `rivals_api`.
 - Compatibility: `rivalsdata` and `RivalsDataClient` remain aliases.
-- Version: `4.0.0`.
+- Version: `4.1.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsClient`.
@@ -113,12 +113,23 @@ version in `pyproject.toml` and `src/rivals_api/__init__.py` together, maintain
 the workflow's PyPI project URL and credentials, and document user-visible
 changes in `docs/CHANGELOG.md`.
 
+Follow [RELEASING.md](RELEASING.md) for future releases. The chat chooses the
+smallest appropriate bump automatically: patch for compatible fixes, minor for
+compatible features, and major only for necessary public API incompatibility.
+Prefer incremental changes and compatible migrations. A push alone does not
+imply a package release; documentation-only changes normally need no bump.
+
 Research docs identify observed behavior separately from inferences. Preserve
 these uncertainties, source labels, and privacy boundaries when extending the
 client.
 
 Overall/hero/class requests default to the current season and mode="all"
-(Competitive plus Quickplay; Custom/Arcade excluded). Hero/class stats use match attribution.
+(Competitive plus Quickplay; Custom/Arcade excluded). They also accept
+season="current", a positive provider season ID, or season="all".
+Current-season detection normalizes Tracker numeric string IDs and falls back
+to the live RivalsTracker global /heroes/stats season; it never substitutes
+all-seasons data or the player's last played season for an unverifiable current season.
+Hero/class stats use match attribution.
 Every match counts once for its longest-played hero. Missing playtime, ties and
 conflicts remain unresolved, with coverage metadata. Provider summaries are
 separately named `summary_heroes`, `summary_classes`, and `heroes.summary`.

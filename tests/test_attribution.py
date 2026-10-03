@@ -117,6 +117,21 @@ def test_detail_outage_does_not_become_summary_attribution(client, monkeypatch):
     assert result.data == [] and len(result.metadata.provider_errors) == 2
 
 
+def test_hero_class_season_scope_and_current_fallback(client, monkeypatch):
+    def tracker(*a, **k):
+        raise RivalsDataHTTPError("Tracker unavailable")
+
+    monkeypatch.setattr(client.providers.tracker, "request", tracker)
+    monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: {"season": "20"})
+    stats = PlayerStats(client, 691218686)
+    for season, expected in [("current", 20), (19, 19), ("all", "all")]:
+        heroes = stats.hero_win_rates(season=season)
+        classes = stats.class_win_rates(season=season)
+        assert heroes.metadata.scope.season == classes.metadata.scope.season == expected
+        assert classes.metadata.coverage.matches_attributed == heroes.metadata.coverage.matches_attributed
+        assert client.calls[-1]["season"] == (None if expected == "all" else expected)
+
+
 def test_mcp_defaults_and_schemas_have_no_character_method(client, monkeypatch):
     import asyncio
     server = pytest.importorskip("rivalsdata.mcp_server", exc_type=ImportError)

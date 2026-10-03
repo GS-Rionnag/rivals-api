@@ -428,7 +428,7 @@ justify-content:space-between;flex-wrap:wrap;color:#a9adb6;font-size:10px;font-v
 
 @mcp.tool()
 def get_player_heroes(
-    uid_or_name: str, season: int | Literal["all"] | None = None,
+    uid_or_name: str, season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
 ) -> Any:
     """List heroes with match-attributed win rates and coverage metadata.
@@ -436,6 +436,8 @@ def get_player_heroes(
     Defaults to current-season Competitive plus Quickplay. Each match counts once for its
     longest-played hero. Ties and missing detail remain unresolved. Caching and
     provider reads are automatic; no complete game-history coverage is claimed.
+    Season accepts "current" (also the omitted default), a positive provider season
+    ID, or "all" for all available tracked seasons.
     """
     return _call(lambda client: client.get_player(uid_or_name).stats.hero_win_rates(
         season=season, mode=mode))
@@ -469,7 +471,7 @@ def get_player_matches(
 @mcp.tool()
 def get_player_win_rate(
     uid_or_name: str,
-    season: int | Literal["all"] | None = None,
+    season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
 ) -> Any:
     """Get season win rate from career counts checked against combined history.
@@ -477,6 +479,8 @@ def get_player_win_rate(
     Defaults to the current season and Competitive plus Quickplay. All excludes
     Custom/Arcade. Intact counts are selected per mode, never averaged rates.
     Metadata records disagreements, history verification and partial fallbacks.
+    Season accepts "current" (also the omitted default), a positive provider season
+    ID, or "all" for all available tracked seasons.
     """
     def fetch(client: RivalsClient, value: str, **filters: Any) -> Any:
         return client.get_player(value).stats.win_rate(**filters)
@@ -486,10 +490,14 @@ def get_player_win_rate(
 @mcp.tool()
 def get_player_hero_win_rates(
     uid_or_name: str,
-    season: int | Literal["all"] | None = None,
+    season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
 ) -> Any:
-    """Return longest-played-hero win rates with coverage; caching is automatic."""
+    """Return longest-played-hero win rates with coverage; caching is automatic.
+
+    Season accepts "current" (also the omitted default), a positive provider season
+    ID, or "all" for all available tracked seasons.
+    """
     return _call(lambda client, value, **filters:
                  client.get_player(value).stats.hero_win_rates(**filters),
                  uid_or_name, season=season, mode=mode)
@@ -498,10 +506,14 @@ def get_player_hero_win_rates(
 @mcp.tool()
 def get_player_class_win_rates(
     uid_or_name: str,
-    season: int | Literal["all"] | None = None,
+    season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
 ) -> Any:
-    """Return class win rates from each match's longest-played hero and coverage."""
+    """Return class win rates from each match's longest-played hero and coverage.
+
+    Season accepts "current" (also the omitted default), a positive provider season
+    ID, or "all" for all available tracked seasons.
+    """
     return _call(lambda client, value, **filters:
                  client.get_player(value).stats.class_win_rates(**filters),
                  uid_or_name, season=season, mode=mode)
@@ -510,7 +522,7 @@ def get_player_class_win_rates(
 @mcp.tool()
 def get_player_stats(
     uid_or_name: str, category: str = "heroes",
-    season: int | Literal["all"] | None = None,
+    season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
 ) -> Any:
     """Get player stats: heroes, maps, bans, or calculated classes.
@@ -518,21 +530,27 @@ def get_player_stats(
     Heroes/classes default to current-season Competitive plus Quickplay. Each match counts
     once for its longest-played hero and that hero's class. Coverage reports
     ties, missing playtime, and conflicts. Supply a season ID or "all" for all
-    available tracked history. Maps/bans retain their provider selectors.
+    available tracked history. "current" explicitly selects the current season.
+    Maps/bans retain their provider selectors when season is omitted.
     """
     methods = {"heroes": "heroes", "maps": "maps", "bans": "bans", "classes": "classes"}
     if category not in methods:
         raise ValueError("category must be one of: heroes, maps, bans, classes")
     def fetch(client: RivalsClient, value: str, category: str,
-              season: int | Literal["all"] | None,
+              season: int | Literal["current", "all"] | None,
               mode: Literal["competitive", "quickplay", "all"]) -> Any:
+        from .stat_scope import resolve_season
+
+        player = client.get_player(value)
+        if category not in ("heroes", "classes") and season == "current":
+            season = resolve_season(player.stats, season)
         season_id = season if category in ("heroes", "classes") else -1 if season == "all" else season
         filters: dict[str, Any] = {"season": season_id}
         if category in ("heroes", "classes"):
             filters["mode"] = mode
         if category == "heroes":
-            return client.get_player(value).stats.hero_win_rates(**filters)
-        return getattr(client.get_player(value).stats, methods[category])(**filters)
+            return player.stats.hero_win_rates(**filters)
+        return getattr(player.stats, methods[category])(**filters)
     return _call(fetch, uid_or_name, category, season, mode)
 
 
