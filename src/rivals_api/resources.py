@@ -250,7 +250,12 @@ class PlayerResource:
 class PlayerHeroes(PlayerResource):
     """Per-player hero summary rows from ``POST /player/heroes``."""
 
-    def fetch(self, *, season: int | Literal["all"] | None = None) -> list[Character]:
+    def fetch(self, *, season: int | Literal["all"] | None = None,
+              mode: Literal["competitive", "quickplay", "all"] = "all") -> list[HeroStatsRecord]:
+        """List match-attributed heroes; all includes Competitive and Quickplay."""
+        return PlayerStats(self._client, self.uid).heroes(season=season, mode=mode)
+
+    def summary(self, *, season: int | Literal["all"] | None = None) -> list[Character]:
         """Fetch hero summaries for one season or all seasons.
 
         ``season="all"`` uses the API's all-seasons selector (season ID -1).
@@ -265,6 +270,45 @@ class PlayerStats(PlayerResource):
     """Detailed per-player statistics tabs."""
 
     def heroes(
+        self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
+        season: int | Literal["all"] | None = None,
+    ) -> list[HeroStatsRecord]:
+        """Canonical hero records: one result for the longest-played hero per match.
+
+        No summary fallback is used for attribution. Each row includes coverage
+        metadata; use hero_win_rates() to inspect coverage even for an empty list.
+        """
+        result = self.hero_win_rates(mode=mode, season=season)
+        return [HeroStatsRecord({**row.to_dict(), mode: row.to_dict(), "mode": mode,
+                                 "provider_metadata": result.metadata.to_dict()})
+                for row in result.data]
+
+    def win_rate(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
+                 season: int | Literal["all"] | None = None) -> DataModel:
+        """Select intact season career counts and check them against match history.
+
+        Defaults to the current season and Competitive plus Quickplay. History
+        fallback and unresolved provider disagreements are explicit in metadata.
+        """
+        from .season_rates import calculate
+
+        return DataModel(calculate(self, season=season, mode=mode))
+
+    def hero_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
+                       season: int | Literal["all"] | None = None) -> DataModel:
+        from .attribution import calculate
+
+        result = calculate(self, season=season, mode=mode)
+        return DataModel({"data": result["heroes"], "metadata": result["metadata"]})
+
+    def class_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
+                        season: int | Literal["all"] | None = None) -> DataModel:
+        from .attribution import calculate
+
+        result = calculate(self, season=season, mode=mode)
+        return DataModel({"data": result["classes"], "metadata": result["metadata"]})
+
+    def summary_heroes(
         self, *, mode: Literal["competitive", "quickplay"],
         season: int | Literal["all"] | None = None,
     ) -> list[HeroStatsRecord]:
@@ -359,15 +403,18 @@ class PlayerStats(PlayerResource):
                         extras.update(games=extras["matchesPlayed"], wins=extras["matchesWon"],
                                       losses=extras["matchesPlayed"] - extras["matchesWon"])
                     if identifier not in by_id or not by_id[identifier].get(mode):
-                        if not original_error:
-                            continue
                         count = extras.get("matchesPlayed")
                         wins = extras.get("matchesWon")
                         if not identifier.isdecimal() or not isinstance(count, (int, float)) or not isinstance(wins, (int, float)):
                             continue
                         by_id.setdefault(identifier, {"hero_id": int(identifier)})[mode] = {
                             "games": count, "wins": wins, "losses": count - wins,
-                            "counts_basis": "tracker_hero_participation", "unique_matches_verified": False}
+                            "counts_basis": "tracker_hero_participation", "unique_matches_verified": False,
+                            "provider_metadata": {"sources": ["tracker"], "evidence": {
+                                "tracker": {"kind": "career", "scope": {
+                                    "uid": self.uid, "hero_id": int(identifier),
+                                    "season": attributes.get("season"), "mode": mode,
+                                    "counts_basis": "hero_participation"}}}}}
                     scope = {"uid": self.uid, "hero_id": int(identifier),
                              "season": attributes.get("season"), "mode": mode,
                              "counts_basis": "hero_participation"}
@@ -387,6 +434,17 @@ class PlayerStats(PlayerResource):
         return self.analytics.matchups(season=season)
 
     def classes(
+        self, *, season: int | Literal["all"] | None = None,
+        mode: Literal["competitive", "quickplay", "all"] = "all",
+    ) -> ClassStatsResponse:
+        """Class results use each match's longest-played hero, once per match."""
+        result = self.class_win_rates(season=season, mode=mode)
+        return ClassStatsResponse({
+            "classes": [{**row.to_dict(), mode: row.to_dict()} for row in result.data],
+            "excluded": result.metadata.unresolved,
+            "metadata": result.metadata.to_dict()})
+
+    def summary_classes(
         self, *, season: int | Literal["all"] | None = None
     ) -> ClassStatsResponse:
         """Sum hero records by tank/support/dps, separately for each mode.
@@ -558,21 +616,28 @@ class PlayerMatches(PlayerResource):
         yield from self.fetch(limit="all", **filters).matches
 
     def fetch_win_rate(
-        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
-        season: int | None = None, mode: str | None = None,
+        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
+        season: int | Literal["all"] | None = None,
+        mode: Literal["competitive", "quickplay", "all"] = "all",
         hero: str | int | None = None, teammate: str | int | None = None,
         cached: bool = True,
     ) -> DataModel:
-        """Estimate from provider stats, calculate from full history, or use cached history.
+        """Select season records automatically; method is a legacy override.
 
         ``estimate`` is fast and averages the current competitive win rates
         reported by RivalsData and RivalsTracker. ``exact`` traverses all
         matching history pages. ``cached`` performs no requests and requires a
         prior complete, unfiltered ``fetch(limit="all")`` on this client.
         """
+        if method is None:
+            if hero is not None or teammate is not None:
+                raise ValueError("Season win rate does not accept hero/teammate filters; use the hero stats or history API")
+            return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode or "all")
         if method not in ("estimate", "exact", "cached"):
             raise ValueError("method must be estimate, exact, or cached")
         if method == "estimate":
+            if mode == "all" and hero is None and teammate is None:
+                return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode)
             if hero is not None or teammate is not None or mode not in (None, "competitive"):
                 raise ValueError("summary estimates support competitive overall only; use method='exact'")
             return self._estimated_overall_win_rate(season=season)
@@ -584,11 +649,20 @@ class PlayerMatches(PlayerResource):
                            "cache_complete": entry["complete"]})
             return DataModel(result)
 
-        history = self.fetch(limit="all", season=season, mode=mode, hero=hero,
-                             teammate=teammate, cached=cached)
-        result = self._calculate_match_rate([row.to_dict() for row in history.matches])
-        result.update({"method": "exact", "sources": history.provider_metadata.get("sources", []),
-                       "provider_errors": history.provider_metadata.get("errors", []),
+        if mode == "all":
+            from .stat_scope import scoped_history
+
+            if hero is not None or teammate is not None:
+                raise ValueError("Use a single mode for legacy filtered history calculations")
+            rows, history_metadata = scoped_history(self, "all" if season is None else season, mode)
+        else:
+            history = self.fetch(limit="all", season=None if season == "all" else season,
+                                 mode=mode, hero=hero, teammate=teammate, cached=cached)
+            rows = {str(row.match_uid): row.to_dict() for row in history.matches}
+            history_metadata = history.provider_metadata
+        result = self._calculate_match_rate(list(rows.values()))
+        result.update({"method": "exact", "sources": history_metadata.get("sources", []),
+                       "provider_errors": history_metadata.get("errors", []),
                        "scope": {"season": season, "mode": mode, "hero": hero,
                                  "teammate": teammate}})
         return DataModel(result)
@@ -674,6 +748,7 @@ class PlayerMatches(PlayerResource):
         requested = (self.uid, season, mode, str(hero) if hero is not None else None,
                      str(teammate) if teammate is not None else None, cached)
         entry = (self._client._match_history_cache.get((self.uid, None, None, None, None, cached))
+                 or self._client._match_history_cache.get((self.uid, season, None, None, None, cached))
                  or self._client._match_history_cache.get(requested))
         if entry is None:
             raise ValueError("No complete match history is cached; call matches.fetch(limit='all') first")
@@ -684,23 +759,27 @@ class PlayerMatches(PlayerResource):
 
     def _select_cached_rows(self, rows, *, season=None, mode=None, hero=None):
         selected = rows
-        if season is not None:
+        if season not in (None, "all"):
             selected = [row for row in selected if str(row.get("season")) == str(season)]
         if mode is not None:
-            identifier = mode_id(mode)
-            selected = [row for row in selected if str(row.get("game_mode_id")) == str(identifier)]
+            identifiers = {1, 2} if mode == "all" else {mode_id(mode)}
+            selected = [row for row in selected if row.get("game_mode_id") in identifiers]
         if hero is not None:
             identifier = int(hero) if str(hero).isdecimal() else hero_id(str(hero))
             selected = [row for row in selected if str(row.get("hero_id")) == str(identifier)]
         return selected
 
     def fetch_hero_win_rates(
-        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
+        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
         season: int | Literal["all"] | None = None,
-        mode: Literal["competitive", "quickplay"] = "competitive",
+        mode: Literal["competitive", "quickplay", "all"] = "all",
     ) -> DataModel:
-        """Get per-hero rates from provider summaries, exact matches, or cached history."""
+        """Canonical match attribution by default; method is a legacy override."""
+        if method is None or method == "exact":
+            return PlayerStats(self._client, self.uid).hero_win_rates(season=season, mode=mode)
         if method == "estimate":
+            if mode == "all":
+                return PlayerStats(self._client, self.uid).hero_win_rates(season=season, mode=mode)
             return self._estimated_character_rates(mode=mode, season=season, group="hero")
         rows, sources, errors = self._history_for_character_rates(
             method=method, season=season, mode=mode)
@@ -709,12 +788,16 @@ class PlayerMatches(PlayerResource):
                           "provider_errors": errors, "scope": {"season": season, "mode": mode}})
 
     def fetch_class_win_rates(
-        self, *, method: Literal["estimate", "exact", "cached"] = "estimate",
+        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
         season: int | Literal["all"] | None = None,
-        mode: Literal["competitive", "quickplay"] = "competitive",
+        mode: Literal["competitive", "quickplay", "all"] = "all",
     ) -> DataModel:
-        """Get per-class rates by the hero with the most play time in each match."""
+        """Canonical match attribution by default; method is a legacy override."""
+        if method is None or method == "exact":
+            return PlayerStats(self._client, self.uid).class_win_rates(season=season, mode=mode)
         if method == "estimate":
+            if mode == "all":
+                return PlayerStats(self._client, self.uid).class_win_rates(season=season, mode=mode)
             return self._estimated_character_rates(mode=mode, season=season, group="class")
         rows, sources, errors = self._history_for_character_rates(
             method=method, season=season, mode=mode)
@@ -830,8 +913,11 @@ class PlayerMatches(PlayerResource):
                           "exact": False})
 
     def _character_match_rates(self, rows, *, group, exact):
+        from .attribution import attribute_match
+
         aggregated: dict[str, dict[str, Any]] = {}
         errors = []
+        unresolved = []
         details_loaded = fallbacks = unknown_result = 0
         for row in rows:
             match_id = row.get("match_uid")
@@ -847,11 +933,12 @@ class PlayerMatches(PlayerResource):
                 except RivalsDataError as exc:
                     errors.append({"match_uid": str(match_id), "error": str(exc)})
                 errors.extend(self._client.provider_errors[error_start:])
-            selected_hero = self._most_played_hero(detail, self.uid) if detail else None
-            if selected_hero is None:
-                selected_hero = row.get("hero_id")
-                if selected_hero is not None:
-                    fallbacks += 1
+            assignment, reason = attribute_match(
+                detail or {}, self.uid, self._client._player_names.get(self.uid), row)
+            if assignment is None:
+                unresolved.append({"match_uid": str(match_id), "reason": reason})
+                continue
+            selected_hero = assignment["hero_id"]
             try:
                 identifier = int(selected_hero)
             except (TypeError, ValueError):
@@ -866,7 +953,7 @@ class PlayerMatches(PlayerResource):
                                                "unknown_results": 0, "heroes": set()})
             item["matches"] += 1
             item["heroes"].add(identifier)
-            outcome = row.get("is_win")
+            outcome = assignment["is_win"]
             if outcome is True or outcome == 1:
                 item["wins"] += 1
             elif outcome is False or outcome == 0:
@@ -887,27 +974,9 @@ class PlayerMatches(PlayerResource):
         return {"data": data, "matches_analyzed": len(rows),
                 "details_loaded": details_loaded, "summary_hero_fallbacks": fallbacks,
                 "unknown_results": unknown_result,
-                "attribution_rule": "hero with maximum per-match play_time; falls back to match-history hero_id",
+                "unresolved": unresolved,
+                "attribution_rule": "unique hero with maximum per-match play_time",
                 "provider_errors": errors}
-
-    @staticmethod
-    def _most_played_hero(detail, uid):
-        teams = detail.get("teams", []) if isinstance(detail, dict) else []
-        teams = list(teams.values()) if isinstance(teams, dict) else teams
-        for team in teams:
-            players = team.get("players", [])
-            players = list(players.values()) if isinstance(players, dict) else players
-            for player in players:
-                if str(player.get("player_uid", player.get("uid", ""))) != str(uid):
-                    continue
-                heroes = player.get("heroes", player.get("player_heroes", []))
-                heroes = list(heroes.values()) if isinstance(heroes, dict) else heroes
-                timed = [hero for hero in heroes if isinstance(hero.get("play_time"), (int, float))]
-                if timed:
-                    return max(timed, key=lambda hero: hero["play_time"]).get("hero_id")
-                return player.get("top_hero_id")
-        return None
-
 
 class PlayerLiveGame(PlayerResource):
     """Current live match data for a player whose profile status is in-game.

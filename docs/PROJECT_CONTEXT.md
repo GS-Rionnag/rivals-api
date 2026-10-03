@@ -17,7 +17,7 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
 
 - Distribution: `rivals-api`; preferred import: `rivals_api`.
 - Compatibility: `rivalsdata` and `RivalsDataClient` remain aliases.
-- Version: `3.0.0`.
+- Version: `4.0.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsClient`.
@@ -31,6 +31,8 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
   handling, caching, browser reuse, privacy and rate-limit errors.
 - `src/rivals_api/normalize.py` and `selection.py`: provider adapters,
   comparable-scope checks, source evidence and selected-value metadata.
+- `src/rivals_api/attribution.py`: canonical longest-played-hero match attribution,
+  class grouping, shared calculation caching and explicit unresolved coverage.
 - `src/rivals_api/history.py`: paginated history federation, source cursors,
   deduplication and consistent filtering.
 - `src/rivals_api/resources.py` and `extensions.py`: player/site resources,
@@ -114,3 +116,19 @@ changes in `docs/CHANGELOG.md`.
 Research docs identify observed behavior separately from inferences. Preserve
 these uncertainties, source labels, and privacy boundaries when extending the
 client.
+
+Overall/hero/class requests default to the current season and mode="all"
+(Competitive plus Quickplay; Custom/Arcade excluded). Hero/class stats use match attribution.
+Every match counts once for its longest-played hero. Missing playtime, ties and
+conflicts remain unresolved, with coverage metadata. Provider summaries are
+separately named `summary_heroes`, `summary_classes`, and `heroes.summary`.
+Hero/class MCP tools no longer expose calculation methods; list tools return
+`data` plus metadata. See the integration guide for migration details.
+
+`player.stats.win_rate()` selects scoped RT/Tracker career records as intact
+counts and checks them against history. RD rank battle records remain ineligible
+diagnostics. Missing summaries fall back to known tracked outcomes. Metadata
+preserves uncertainty and coverage; no percentage averaging or full-coverage
+claim. The MCP overall tool no longer exposes method, cached, hero or teammate.
+The legacy profile win_rate property remains a competitive snapshot; normal
+season requests and matches.fetch_win_rate() use the new canonical calculation.

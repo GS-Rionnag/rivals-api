@@ -70,6 +70,8 @@ class RivalsClient:
         self.provider_cache_ttl = provider_cache_ttl
         self.providers = Providers(self)
         self._player_names: dict[int, str] = {}
+        self._attribution_cache: dict[tuple, tuple[float, dict]] = {}
+        self._season_rate_cache: dict[tuple, tuple[float, dict]] = {}
         self._match_history_cache = _MATCH_HISTORY_CACHE
         self._match_detail_cache = _MATCH_DETAIL_CACHE
         self.provider_errors: list[dict[str, str]] = []
@@ -97,6 +99,8 @@ class RivalsClient:
 
     def close(self) -> None:
         """Close the underlying HTTP session."""
+        self._attribution_cache.clear()
+        self._season_rate_cache.clear()
         self.session.close()
         self.providers.close()
 

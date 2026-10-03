@@ -27,7 +27,7 @@ class HeroClient:
 
 def test_weighted_class_totals_modes_and_exclusions():
     client = HeroClient()
-    result = PlayerStats(client, 123).classes(season=20)
+    result = PlayerStats(client, 123).summary_classes(season=20)
     groups = {row.player_class: row for row in result.classes}
 
     assert client.request == ("/player/stats/heroes", {"uid": 123, "season": 20})
@@ -75,7 +75,7 @@ class SeasonClient:
 ])
 def test_class_season_selector_uses_the_selected_hero_data(season, payload, wins):
     client = SeasonClient()
-    result = PlayerStats(client, 123).classes(season=season)
+    result = PlayerStats(client, 123).summary_classes(season=season)
     assert client.request == ("/player/stats/heroes", payload)
     assert result.classes[1].competitive.wins == wins
     metadata = result.to_dict()["metadata"]
@@ -92,40 +92,22 @@ def test_class_season_selector_uses_the_selected_hero_data(season, payload, wins
 
 def test_detailed_hero_stats_accept_the_same_all_seasons_selector():
     client = SeasonClient()
-    rows = PlayerStats(client, 123).heroes(mode="competitive", season="all")
+    rows = PlayerStats(client, 123).summary_heroes(mode="competitive", season="all")
     assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
     assert rows[0].competitive.wins == 12
     assert rows[0].mode == "competitive"
     assert "quickplay" not in rows[0]
     with pytest.raises(TypeError):
-        PlayerStats(client, 123).heroes(season="all")
+        PlayerStats(client, 123).summary_heroes(season="all")
     with pytest.raises(ValueError):
-        PlayerStats(client, 123).heroes(mode="invalid", season="all")
+        PlayerStats(client, 123).summary_heroes(mode="invalid", season="all")
 
 
 @pytest.mark.parametrize("season,season_id", [(None, None), (20, 20), ("all", -1)])
 def test_hero_summary_season_selector(season, season_id):
     client = SeasonClient()
-    PlayerHeroes(client, 123).fetch(season=season)
+    PlayerHeroes(client, 123).summary(season=season)
     expected = {"uid": 123}
     if season_id is not None:
         expected["season"] = season_id
     assert client.request == ("/player/heroes", expected)
-
-
-def test_mcp_stats_exposes_all_seasons_and_forwards_the_selector(monkeypatch):
-    import asyncio
-    from types import SimpleNamespace
-
-    server = pytest.importorskip("rivalsdata.mcp_server", exc_type=ImportError)
-    client = SeasonClient()
-    client.get_player = lambda value: SimpleNamespace(stats=PlayerStats(client, 123))
-    monkeypatch.setattr(server, "_call", lambda fn, *a, **kw: fn(client, *a, **kw))
-    result = server.get_player_stats("123", category="classes", season="all")
-    assert client.request == ("/player/stats/heroes", {"uid": 123, "season": -1})
-    assert result.classes[1].competitive.wins == 12
-    assert result.metadata.season == "all"
-    assert result.metadata.season_scope == "all"
-    tools = asyncio.run(server.mcp.list_tools())
-    schema = next(tool.inputSchema for tool in tools if tool.name == "get_player_stats")
-    assert {"const": "all", "type": "string"} in schema["properties"]["season"]["anyOf"]

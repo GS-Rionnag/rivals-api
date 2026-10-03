@@ -124,7 +124,7 @@ def test_hero_enrichment_preserves_counts_and_required_mode(client, monkeypatch,
     monkeypatch.setattr(client, "_post_json", lambda *a: deepcopy(primary))
     monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: deepcopy(captured["rt_profile"]))
     monkeypatch.setattr(client.providers.tracker, "request", lambda *a, **k: deepcopy(captured["tracker_competitive_career"]))
-    result = PlayerStats(client, 1970288503).heroes(mode="competitive", season=20)
+    result = PlayerStats(client, 1970288503).summary_heroes(mode="competitive", season=20)
     loki = next(h for h in result if h.hero_id == 1016)
     assert loki.competitive.games == 79 and loki.rank == 4
     assert loki.competitive.play_time > 0
@@ -133,14 +133,14 @@ def test_hero_enrichment_preserves_counts_and_required_mode(client, monkeypatch,
     assert any(c.field == "games" and c.alternative == 77
                for c in loki.competitive.provider_metadata.conflicts)
     with pytest.raises(ValueError):
-        PlayerStats(client, 1970288503).heroes(mode="all")
+        PlayerStats(client, 1970288503).summary_heroes(mode="all")
 
 
 def test_all_seasons_does_not_merge_tracker_default_into_lifetime(client, monkeypatch, captured):
     monkeypatch.setattr(client, "_post_json", lambda *a: [])
     monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: captured["rt_profile"])
     # Tracker's request remains the unexpected-network guard.
-    PlayerStats(client, 1970288503).heroes(mode="competitive", season="all")
+    PlayerStats(client, 1970288503).summary_heroes(mode="competitive", season="all")
 
 
 def test_new_endpoint_routing_scope_and_all_season_career(client, monkeypatch):

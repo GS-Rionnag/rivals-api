@@ -29,7 +29,7 @@ print(hero_id("Loki"))  # 1016
 with RivalsClient() as rd:
     player = rd.get_player("GS-")  # numeric UID works too
     print(player.name, player.level, player.rank_game_season)
-    print(player.win_rate)  # Current-season competitive win rate
+    print(player.stats.win_rate().win_rate_pct)  # Current season: Competitive + Quickplay
 
     # Player profile sections are lazy resource managers.
     hero_season = player.heroes.fetch(season=20)
@@ -37,13 +37,11 @@ with RivalsClient() as rd:
     map_stats = player.stats.maps(season=20)
     match_page = player.matches.fetch(limit=20, season=20)
     all_matches = player.matches.fetch(limit="all")
-    combined_rate = player.matches.fetch_win_rate(season=20)
-    print(combined_rate.win_rate_pct, combined_rate.provider_rates)
-    fast_rate = player.matches.fetch_win_rate()
-    exact_rate = player.matches.fetch_win_rate(method="exact")
-    cached_rate = player.matches.fetch_win_rate(method="cached")  # after fetch(limit="all")
-    hero_rates = player.matches.fetch_hero_win_rates(method="exact")
-    class_rates = player.matches.fetch_class_win_rates(method="cached")
+    season_rate = player.stats.win_rate()
+    competitive_rate = player.stats.win_rate(mode="competitive", season=20)
+    print(season_rate.win_rate_pct, season_rate.metadata.coverage)
+    hero_rates = player.stats.hero_win_rates()
+    class_rates = player.stats.class_win_rates()
 
     # Current match when its provider exposes it; Custom discovery is unsupported.
     live_game = player.live_game.fetch()
@@ -64,68 +62,79 @@ import path is also retained for existing projects. To migrate an existing
 installation, uninstall `rivalsdata-api` first, then install `rivals-api`;
 this avoids the two distributions sharing the compatibility-package files.
 
-The player overview's overall win rate (`player.win_rate`) is the **current-season
-competitive win rate**. It uses the latest available competitive season with
-usable counts when a direct source rate is absent; it does not combine seasons.
-Hero and class stats use the season selector supplied to their own methods.
-
-Calculated player class statistics are available through
-`player.stats.classes(season=20)` and the MCP `get_player_stats` tool with
-`category="classes"`. Pass a numeric season ID for that season, or
-`season="all"` for combined all-seasons data, matching `player.heroes.fetch`.
-Omitting the season uses the endpoint default. `player.stats.heroes` also
-accepts `season="all"`. Each row contains `player_class` (`tank`, `support`,
-`dps`), the official role, hero IDs, and separate `competitive` and `quickplay`
-totals for games, wins, losses, and available MVP/SVP counts.
+Use `player.stats.win_rate()` for the canonical season win rate. Overall,
+hero, and class requests accept `mode="competitive"`, `"quickplay"`, or `"all"`;
+**the default is `"all"`, meaning Competitive plus Quickplay**. Custom, Arcade,
+and other queues are excluded. Omitted season resolves the current season;
+a numeric season selects that season. `season="all"` is a separate selector
+for all available seasons.
 
 ```python
-with RivalsClient() as rd:
-    player = rd.get_player("GS-")
-    stats = player.stats.classes(season=20)
-    all_seasons = player.stats.classes(season="all")
-    for row in stats.classes:
-        print(row.player_class, row.competitive.win_rate)
-    print(stats.excluded)  # Unknown roles or incomplete win/loss records
+rate = player.stats.win_rate()  # Current season, Competitive plus Quickplay
+ranked = player.stats.win_rate(mode="competitive")
+quickplay = player.stats.win_rate(mode="quickplay", season=20)
+print(rate.wins, rate.games, rate.win_rate_pct)
+print(rate.metadata.by_mode, rate.metadata.coverage)
 ```
 
-For MCP, use `get_player_stats(uid_or_name="GS-", category="classes", season=20)`
-for one season, or `season="all"` for combined all-seasons stats. Both return
-the same class response structure.
+Overall rates select intact career wins/games records per mode and check them
+against deduplicated history. Provider percentages are never averaged. The
+combined rate sums selected Competitive and Quickplay counts before division;
+it never uses a provider's potentially broader `all` record. Agreement and
+matching history support selection; unresolved disagreements stay visible.
+RivalsData rank-system battle counts remain diagnostic observations because
+their equivalence to career matches is unverified. Missing career records fall
+back to tracked outcomes, explicitly marked in coverage. Unknown outcomes are
+excluded from fallback denominators. Overall outcomes do not require hero
+playtime. Complete game-history coverage is never claimed.
 
-Detailed hero stats require a mode and match the website's selected tab:
+The old `player.win_rate` property and profile-overview `win_rate` field remain
+competitive profile snapshots for compatibility. They do not invoke the new
+season/history verification. Use `player.stats.win_rate()` or MCP
+`get_player_win_rate` for the canonical selectable season calculation.
+
+Hero and class win rates count each retrieved match once, assigning its result
+to the hero you played longest and that hero's class. Ordinary requests need
+no calculation-method argument:
 
 ```python
-competitive = player.stats.heroes(mode="competitive", season="all")
-quickplay = player.stats.heroes(mode="quickplay", season=20)
-print(competitive[0].competitive.games)
-print(competitive[0].rank)  # Hero leaderboard position, or None if unavailable
+heroes = player.stats.heroes()  # Current season, both modes, most played first
+classes = player.stats.classes()
+for hero in heroes:
+    print(hero.name, hero.games, hero.wins, hero.losses, hero.win_rate_pct)
+
+quickplay = player.stats.heroes(mode="quickplay", season="all")
+rates = player.stats.hero_win_rates()  # Envelope retains coverage for empty lists
+print(rates.metadata.coverage)
+print(rates.metadata.unresolved)
 ```
 
-Only heroes with data for the chosen mode are returned, with that mode's nested
-stats and a `mode` label; the other mode is omitted. Rows are sorted by the
-selected mode's games played descending, with ties retaining the JSON order.
-The source returns both modes in one response; filtering and sorting happen
-in this package, as they do on the website. Existing calls to
-`player.stats.heroes()` must now supply `mode`. MCP also requires `mode` when
-`get_player_stats` uses `category="heroes"`; other categories do not require it.
-The separate summary method `player.heroes.fetch()` keeps its existing behavior.
+`player.heroes.fetch()` uses the same calculation. `get_player_heroes` and
+`get_player_stats(category="heroes")` return a `data` list plus `metadata`;
+hero/class win-rate MCP tools no longer expose `method`. All default to
+Competitive plus Quickplay and resolve the current season from live Tracker profile metadata.
+If that season cannot be verified, supply a numeric season or `"all"`.
+`"all"` means all available tracked history, not guaranteed lifetime coverage.
+Class responses retain `.classes`, with direct counts and the selected mode's
+nested counts; hero rows likewise retain the selected mode's nested stats.
 
-Hero stats include the source's top-level `rank`, matching the **#N** displayed
-in the left-hand hero card. It is preserved for either mode and all-seasons
-requests when supplied by the source; it is not recalculated as a quickplay or
-all-seasons leaderboard position. Missing ranks are returned as `None`.
+Match details supply per-hero seconds. Complete provider records are compared
+independently: durations are never blended across sources. Missing/invalid
+playtime, equal maximum playtimes, ambiguous identity, conflicting longest
+heroes, and unknown/conflicting outcomes remain unresolved. There is no
+summary-hero fallback. Coverage reports found, attributed, and unresolved
+matches; it never claims complete game history. `play_time` is the assigned
+hero's playtime in its attributed matches, not total lifetime hero playtime.
 
-Win rates are `total wins / (total wins + total losses)`, rounded to an integer
-percent. They are weighted by hero records, rather than averaging hero win
-rates. The response's `metadata` identifies the source, formula, and requested
-season scope. Upstream hero-switch attribution is unknown; hero records may
-overlap within a match, so these totals cannot establish distinct match counts
-or the player's overall match win rate. All-seasons coverage is limited to
-records returned by the source; complete lifetime coverage is unverified.
-Excluded rows also produce a metadata warning. Empty modes
-have a `None` win rate. Role mappings were observed on RivalsData on
-2026-09-30, including Deadpool's separate role IDs; generic Deadpool and unknown
-IDs are excluded rather than assigned a guessed class.
+First requests can load details for every retrieved match. Caching is automatic:
+successful detail reads are reused and hero/class queries share their calculation
+within the client's cache TTL. Incomplete calculations are retried.
+
+For the old provider-summary definitions, use `player.heroes.summary()`,
+`player.stats.summary_heroes(mode="competitive")`, or
+`player.stats.summary_classes()`. These retain provider participation counts,
+combat fields, and leaderboard ranks; they have different attribution rules.
+Canonical rows do not invent leaderboard ranks and expose `rank=None`.
 
 Character playtime was checked with Camoufox on 2026-09-30. Player hero stats
 did not expose cumulative hours, including in All Seasons. Match details do
@@ -283,25 +292,16 @@ without additional network requests. Unmapped codes produce an explicit
 See [readable match references](docs/GAME_REFERENCES.md) for mapping sources
 and gameplay-code limits.
 
-The overall, hero, and class win-rate methods accept `method="estimate"` (the
-default), `"exact"`, or `"cached"`. Overall estimates average available
-RivalsData/RivalsTracker competitive rates; hero estimates average each
-provider's per-hero rates; class estimates aggregate provider hero-participation
-counts within each class before averaging provider rates. These estimates are
-fast and approximate, and include provider sample counts. Exact calculations
-traverse all available history pages and deduplicate by match ID. Hero/class
-exact calculations also inspect match details and assign each match to the
-player's longest-played hero, which can require one detail lookup per match.
-Cached calculations make no requests and reuse a prior
-`matches.fetch(limit="all")` in the same Python process, including across client
-instances. If the cached history fetch had provider errors, the calculation
-does not retry missing data; inspect its coverage/errors. Cached hero/class
-rates use cached playtime details when available and otherwise fall back to
-the history row's hero. The returned metadata reports sources, unknown results,
-provider errors, and hero-attribution fallback counts. See the
-[win-rate method guide](docs/PROVIDER_INTEGRATION.md#win-rate-calculation-choices)
-for the assumptions and costs of each method.
-MCP tools expose the same three methods. `player.proficiency.fetch()` returns a
+Hero/class requests use the canonical longest-played-hero calculation described
+above. The Python `matches.fetch_hero_win_rates()` and
+`matches.fetch_class_win_rates()` names remain compatibility aliases by default.
+Explicit legacy `method="estimate"` with a single mode retains summary estimates; `method="cached"`
+uses already-cached details without requests and leaves unverifiable matches
+unresolved. These overrides are not exposed by the hero/class MCP tools.
+Overall `matches.fetch_win_rate()` aliases the new season calculation. Explicit
+legacy method overrides remain available in Python, but the MCP overall tool
+now accepts only player, season, and mode. Its default mode is also `"all"`.
+`player.proficiency.fetch()` returns a
 `ProficiencyResponse`. Nested match
 teams and participants are converted to `MatchTeam` and `MatchPlayer`; embedded
 character records use `Character`. Models support mapping access

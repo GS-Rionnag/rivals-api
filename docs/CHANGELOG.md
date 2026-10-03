@@ -1,5 +1,48 @@
 # Changelog
 
+## 4.0.0 — 2026-10-03
+
+This release changes canonical hero/class statistics from provider participation
+summaries to longest-played-hero match attribution. All canonical win-rate APIs
+now default to Competitive plus Quickplay (`mode="all"`). MCP hero/class list
+results and win-rate schemas have changed; see the migration notes below.
+
+### Migration
+
+- Use `player.stats.win_rate(season=..., mode=...)` for the season calculation.
+  The profile `player.win_rate` property remains a competitive snapshot.
+- Hero/class requests now count deduplicated matches once per longest-played
+  hero, with explicit unresolved coverage. Provider summaries moved to
+  `summary_heroes`, `summary_classes`, and `player.heroes.summary`.
+- Supply `mode="competitive"` to retain the previous canonical default scope;
+  `mode="all"` combines Competitive and Quickplay and excludes other queues.
+- MCP hero lists now return `data` plus `metadata`. Overall/hero/class win-rate
+  tools no longer accept `method`; overall tools also drop `cached`, `hero`, and
+  `teammate`. Python legacy method overrides remain available.
+
+### Changes
+
+- Added `player.stats.win_rate()` and simplified MCP overall win-rate requests:
+  intact season career records are selected per mode and checked against history,
+  with explicit disagreements and partial-history fallbacks instead of averaging.
+- Overall, hero, and class canonical rates now accept competitive/quickplay/all
+  and default to all (Competitive plus Quickplay, excluding Custom/Arcade).
+
+- Include Tracker.gg in combined match history, with verified player identity,
+  resumable pagination, deduplication, and explicit season coverage limitations.
+- Correct the GS-4 comparison: an empty provider history does not establish
+  absence of competitive activity. Tracker.gg exposes competitive matches
+  missing from RivalsData's cached history; RivalsTracker's API also returned
+  competitive matches in the 2026-10-03 check.
+
+- Hero/class requests now count each match once for its longest-played hero.
+  Missing playtime, ties, identity ambiguity and source conflicts stay unresolved.
+- Normal hero/class requests default to the current season, with automatic
+  caching and explicit coverage. Their MCP schemas no longer expose `method`.
+- Provider hero/class summaries moved to explicitly named summary methods; empty
+  RivalsData competitive rows can now fall back to Tracker summary rows.
+
+
 ## 3.0.0 — 2026-10-02
 
 This release changes `match.platform` from a scalar to a typed `Platform`.

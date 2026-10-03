@@ -73,6 +73,11 @@ class DataModel(Mapping[str, Any]):
     @property
     def win_rate(self) -> int | None:
         """Return an integer percentage when this object exposes win/loss data."""
+        if "win_rate_pct" in self._data:
+            try:
+                return round(float(self._data["win_rate_pct"]))
+            except (TypeError, ValueError):
+                return None
         for key in ("win_rate", "winrate", "winRate"):
             if key in self._data:
                 try:
@@ -678,12 +683,13 @@ class HeroStatsRecord(Character):
     mode: str | None
     competitive: HeroModeStats | None
     quickplay: HeroModeStats | None
+    all: HeroModeStats | None
     rank: int | str | None
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)
         self._data.setdefault("rank", None)
-        for key in ("competitive", "quickplay"):
+        for key in ("competitive", "quickplay", "all"):
             if isinstance(self._data.get(key), Mapping):
                 self._data[key] = HeroModeStats(self._data[key])
 
@@ -708,10 +714,11 @@ class ClassStatsRecord(DataModel):
     hero_ids: list[int | str]
     competitive: ClassModeStats
     quickplay: ClassModeStats
+    all: ClassModeStats
 
     def __init__(self, data: Mapping[str, Any] | None = None, **values: Any) -> None:
         super().__init__(data, **values)
-        for key in ("competitive", "quickplay"):
+        for key in ("competitive", "quickplay", "all"):
             if isinstance(self._data.get(key), Mapping):
                 self._data[key] = ClassModeStats(self._data[key])
 

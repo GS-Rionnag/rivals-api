@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import base64
 import json
+from urllib.parse import quote
 
 from .exceptions import RivalsDataError, RivalsDataHTTPError
 from .models import MatchHistory
-from .normalize import merge, mode_id, rt_history, timestamp
+from .normalize import merge, mode_id, rt_history, timestamp, tracker_history
 
 PREFIX = "rivals:v1:"
 
@@ -20,7 +21,8 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
              "teammate": str(teammate) if teammate is not None else None,
              "cached": cached, "include_rt": include_rt}
     state = {"rd": cursor, "rt": 0, "rd_done": False,
-             "rt_done": not include_rt, "seen": [], "pending": []}
+             "rt_done": not include_rt, "tracker": None,
+             "tracker_done": not include_rt, "seen": [], "pending": []}
     if cursor and cursor.startswith(PREFIX):
         try:
             if len(cursor) > 1_000_000:
@@ -34,6 +36,9 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                     or not isinstance(state.get("pending", []), list)):
                 raise ValueError("invalid cursor state")
             state.setdefault("pending", [])
+            # Old cursors did not traverse Tracker; start that source once.
+            state.setdefault("tracker", None)
+            state.setdefault("tracker_done", not include_rt)
         except (ValueError, KeyError, TypeError) as exc:
             raise ValueError("Invalid history cursor or changed filters") from exc
     seen = set(state["seen"])
@@ -99,7 +104,7 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
         # RT does not expose this filter, and summary rows cannot verify it.
         state["rt_done"] = True
         errors.append({"source": "rivalstracker", "error": "teammate filter unsupported"})
-    if include_rt and (limit is None or len(rows) < limit) and not state["rt_done"] and teammate is None:
+    if include_rt and not state["rt_done"] and teammate is None:
         # Skip duplicate-only RT pages so callers don't mistake an empty page
         # for the end of the federated history. Work remains bounded per call.
         for _ in range(10):
@@ -134,6 +139,63 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                 errors.append({"source": "rivalstracker", "error": str(exc)})
                 state["rt_done"] = True
                 break
+    if include_rt and not state["tracker_done"]:
+        name = resource._client._player_names.get(resource.uid)
+        if teammate is not None or not name:
+            state["tracker_done"] = True
+            errors.append({"source": "tracker", "error": "teammate filter unsupported"
+                           if teammate is not None else "No verified in-game name for this UID"})
+        else:
+            # Tracker's season selector can cross seasons; never assign the
+            # requested season to a row without independent match evidence.
+            for _ in range(10):
+                try:
+                    data = resource._client.providers.tracker.request(
+                        "/api/v2/marvel-rivals/standard/matches/ign/" + quote(name, safe=""),
+                        params={"next": state["tracker"], "season": season})
+                    if not isinstance(data, dict) or not isinstance(data.get("matches"), list):
+                        raise RivalsDataHTTPError("Tracker returned invalid match history")
+                    successes += 1
+                    if "tracker" not in sources:
+                        sources.append("tracker")
+                    added = 0
+                    unknown_season = False
+                    for row in data["matches"]:
+                        normalized = tracker_history(row, name)
+                        if not normalized or not normalized.get("match_uid"):
+                            continue
+                        identifier = str(normalized["match_uid"])
+                        if identifier in seen:
+                            continue
+                        if normalized.get("season") is None and identifier in rows:
+                            normalized["season"] = rows[identifier].get("season")
+                        if season is not None and normalized.get("season") is None:
+                            unknown_season = True
+                            continue
+                        if (season is not None and str(normalized.get("season")) != str(season)
+                                or mode and normalized.get("game_mode_id") != mode
+                                or hero and str(hero) not in {str(h.get("heroId"))
+                                                            for h in normalized["heroes"]}):
+                            continue
+                        if identifier in rows:
+                            rows[identifier] = merge(rows[identifier], normalized, "tracker")
+                        else:
+                            rows[identifier] = normalized
+                            added += 1
+                    if unknown_season:
+                        errors.append({"source": "tracker", "error":
+                                       "Skipped matches with unverified season"})
+                    next_token = (data.get("metadata") or {}).get("next")
+                    state["tracker_done"] = next_token is None or next_token == state["tracker"]
+                    if next_token is not None and next_token == state["tracker"]:
+                        errors.append({"source": "tracker", "error": "Repeated pagination token"})
+                    state["tracker"] = next_token
+                    if added or state["tracker_done"] or rows:
+                        break
+                except RivalsDataError as exc:
+                    errors.append({"source": "tracker", "error": str(exc)})
+                    state["tracker_done"] = True
+                    break
     if not successes and errors and not seen:
         raise RivalsDataHTTPError("No provider could return match history: " + str(errors))
     result = sorted(rows.values(), key=lambda r: timestamp(r.get("timestamp")), reverse=True)
@@ -144,7 +206,7 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
     state["pending"] = pending
     state["seen"] = sorted(seen | {str(row["match_uid"]) for row in emitted
                                    if row.get("match_uid") is not None})
-    more = bool(pending) or not (state["rd_done"] and state["rt_done"])
+    more = bool(pending) or not (state["rd_done"] and state["rt_done"] and state["tracker_done"])
     next_cursor = PREFIX + base64.urlsafe_b64encode(json.dumps(
         {"scope": scope, "state": state}, separators=(",", ":")).encode()).decode() if more else None
     return MatchHistory({**primary, "matches": emitted, "next_cursor": next_cursor,

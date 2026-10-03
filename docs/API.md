@@ -1,5 +1,6 @@
 # RivalsData provider API inventory
 
+This document audits provider endpoints and their explicitly named summary wrappers. Normal hero/class requests now use canonical longest-played-hero match attribution with automatic caching and coverage; see [the integration guide](PROVIDER_INTEGRATION.md#canonical-heroclass-win-rates).
 This is an observed inventory of the public web client's API, gathered by
 reviewing the RivalsData UI and its browser requests on 2026-09-29. The upstream
 API is undocumented and can change. Field sets below are examples from live
@@ -57,12 +58,12 @@ the value as a season win rate. Hero and class rates follow their season selecto
 
 ## Observed UI and routes
 
-`player.stats.classes(season=...)` derives tank (Vanguard), support (Strategist),
+`player.stats.summary_classes(season=...)` derives tank (Vanguard), support (Strategist),
 and DPS (Duelist) totals from `/player/stats/heroes`; it does not call a class
 endpoint. It sums games/wins/losses separately for competitive and quickplay,
 accepting a numeric season ID or `season="all"` (sent to the API as `-1`). The
 all-seasons selection combines the returned hero records across seasons;
-omitting the season keeps the endpoint default. `player.stats.heroes` and MCP
+omitting the season keeps the endpoint default. `player.stats.summary_heroes` and MCP
 `get_player_stats` support the same selector. The method also sums
 MVP/SVP counts when every included row supplies them. Win rate is calculated
 from summed wins and losses. Unknown classes and incomplete win/loss rows appear
@@ -80,7 +81,7 @@ The roster at `/stats` on 2026-09-30 identifies Deadpool variants as 10571
 
 ### Detailed hero mode selection and ordering
 
-`player.stats.heroes(mode="competitive", season="all")` requires either
+`player.stats.summary_heroes(mode="competitive", season="all")` requires either
 `"competitive"` or `"quickplay"`. Missing mode raises `TypeError`; unsupported
 values raise `ValueError`. The upstream `/player/stats/heroes` request still
 contains only UID and optional season, because the source returns both modes
@@ -104,7 +105,7 @@ Switching tabs sent no additional hero-stats request.
 MCP `get_player_stats(category="heroes", mode=..., season=...)` requires mode
 for heroes and rejects missing or invalid values before making a request.
 Other categories retain their behavior; class stats still aggregate both modes
-from the complete source response. `player.heroes.fetch()` is unchanged.
+from the complete source response. `player.heroes.summary()` is unchanged.
 
 ### Character playtime investigation (2026-09-30)
 

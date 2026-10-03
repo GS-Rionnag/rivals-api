@@ -334,6 +334,33 @@ def tracker_stats(segment: dict) -> dict:
     return result
 
 
+def tracker_history(body: dict, name: str) -> dict | None:
+    """Accept only the requested player's uniquely identified summary."""
+    segments = [s for s in body.get("segments", [])
+                if s.get("metadata", {}).get("platformInfo", {}).get(
+                    "platformUserIdentifier") == name]
+    if len(segments) != 1:
+        return None
+    segment = segments[0]
+    attrs, meta = body.get("attributes", {}), body.get("metadata", {})
+    player = segment.get("metadata", {})
+    heroes = player.get("heroes") or []
+    mode = {"quick-match": 1, "competitive": 2, "custom-game": 3,
+            "arcade": 4}.get(attrs.get("mode"))
+    return {**tracker_stats(segment), "match_uid": attrs.get("id"),
+            "game_mode_id": mode, "game_mode_name": meta.get("modeName"),
+            "season": attrs.get("season", meta.get("season")),
+            "timestamp": meta.get("timestamp"), "map_id": attrs.get("mapId"),
+            "duration_seconds": meta.get("duration"),
+            "is_win": {"win": True, "loss": False}.get(player.get("result")),
+            "is_mvp": player.get("isMvp"), "is_svp": player.get("isSvp"),
+            "hero_id": heroes[0].get("heroId") if len(heroes) == 1 else None,
+            "heroes": deepcopy(heroes),
+            "provider_metadata": {"sources": ["tracker"], "evidence": {
+                "tracker": {"kind": "match_summary", "scope": {
+                    "match_uid": attrs.get("id")}}}}}
+
+
 def tracker_match(body: dict) -> dict:
     segments = body.get("segments", [])
     teams: dict[Any, dict] = {}

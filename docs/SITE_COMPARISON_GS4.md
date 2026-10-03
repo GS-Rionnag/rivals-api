@@ -1,5 +1,33 @@
 # GS-4: RivalsData versus RivalsTracker
 
+## Correction: competitive history coverage (2026-10-03)
+
+The earlier two-provider snapshot below does not establish that GS-4 has no
+recent competitive matches. Tracker.gg's public GS-4 history returned 25 rows
+on its first page, including 15 competitive matches. The newest competitive
+match was `5521403_1790383734_1231008_11001_11`, timestamp
+`2026-09-26T01:01:44+00:00`. RivalsData's cached competitive request returned
+an empty list, while RivalsTracker's competitive API request now returned 20
+rows, including that same match. These are first-page observations, not total
+match counts or proof of complete coverage. The user's observation that the
+RivalsTracker site showed no recent competitive matches remains distinct from
+the API response obtained in this check.
+
+The client previously federated only RivalsData and RivalsTracker histories,
+despite using Tracker.gg for other sections. Combined history now also queries
+Tracker.gg by the verified in-game name, follows its returned pagination token,
+and retains source errors and disagreements. An empty provider history describes
+that response's coverage; it does not demonstrate that the player did not play.
+Tracker rows without verified seasons are excluded from exact-season queries
+with an explicit coverage error, since its season selector can cross seasons.
+
+Public source: [GS-4 on Tracker.gg](https://tracker.gg/marvel-rivals/profile/ign/GS-4/).
+Local read-only captures: `dist/gs4-history-current.json` and
+`dist/gs4-profile-current.json`. Regression data is packaged in
+`tests/fixtures/gs4_tracker_history.json`.
+
+## Earlier two-provider snapshot
+
 Checked 2026-10-01, UID 691218686, season 20. This is a single-profile
 comparison of API responses, not a site-wide accuracy benchmark. Raw responses
 are saved in `dist/site-comparison/responses.json`.
@@ -48,7 +76,7 @@ For GS-4, RivalsTracker is the better source for discovering recent and Custom
 matches and obtaining aggregate hero playtime. RivalsData offers richer
 normalized hero averages (per game/per 10, team-up records) and contributes
 matches absent from RivalsTracker. Neither retrieved history is established as
-complete; both show no tracked competitive matches despite their profile info
+complete; both retrieved histories in that snapshot showed no competitive matches despite their profile info
 recording 26 competitive games. A combined client should preserve source,
 season, mode, and metric definitions and deduplicate by match ID.
 

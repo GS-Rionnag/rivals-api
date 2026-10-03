@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rivals-api"
-version = "3.0.0"
+version = "4.0.0"
 description = "Multi-source Python client and MCP server for Marvel Rivals player stats"
 keywords = ["marvel-rivals", "multi-source", "game-stats", "tracker", "mcp"]
 readme = "README.md"
