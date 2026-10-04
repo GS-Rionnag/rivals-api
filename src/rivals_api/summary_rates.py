@@ -308,6 +308,12 @@ def calculate(resource, *, season=None, mode="all"):
     total = {k: sum(r[k] for r in by_mode.values() if r is not None) for k in ("games", "wins", "losses")}
     overall = {**rates(total), "matches": total["games"]} if not missing_modes else {
         "games": None, "matches": None, "wins": None, "losses": None, "win_rate": None, "win_rate_pct": None}
+    available_modes = [m for m, r in by_mode.items() if r is not None]
+    # Preserve the complete-scope fields, but expose useful partial counts
+    # separately so consumers cannot mistake one available queue for both.
+    overall["partial_result"] = ({**rates(total), "matches": total["games"],
+                                   "included_modes": available_modes}
+                                  if missing_modes and available_modes else None)
     metadata = {"method": "normal", "scope": {"uid": uid, "season": season, "mode": mode},
                 "counts_basis": "selected provider summaries; hero/class participation may differ from unique matches",
                 "sources": sorted(selected_sources), "included_modes": list(modes), "by_mode": by_mode,
@@ -316,6 +322,7 @@ def calculate(resource, *, season=None, mode="all"):
                 "selection_uncertain": bool(missing_modes) or any(v["uncertain"] for s in selections.values() for v in s.values()),
                 "coverage": {"history_requested": False, "complete_game_history_verified": False,
                              "missing_overall_modes": missing_modes,
+                             "available_overall_modes": available_modes,
                              "missing_hero_modes": [m for m in modes if not candidates[m]["heroes"]],
                              "missing_class_modes": [m for m in modes if not candidates[m]["heroes"] and not candidates[m]["classes"]]}, "unresolved": []}
     result = {"overall": overall, "heroes": sorted([rates(r) for r in hero_groups.values()], key=lambda r: (-r["games"], r["hero_id"])),

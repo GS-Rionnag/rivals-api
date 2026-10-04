@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.2.0 — 2026-10-04
+
+- Expose `partial_result` for overall summaries when only some requested modes
+  have data, while retaining null full-scope fields and explicit missing modes.
+  Add regression tests ensuring failures in each provider preserve usable
+  overall/hero/class summaries from the other providers.
+- Add bounded random delay above the configured request interval to reduce
+  regular request bursts. Explicit request spacing remains a minimum; provider
+  cooldowns are still respected by HTTP and browser requests.
+
 ## 5.1.0 — 2026-10-04
 
 - Pace HTTP/browser API requests per provider across clients in the same process.

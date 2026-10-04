@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import time
 from email.utils import parsedate_to_datetime
 from threading import RLock
@@ -58,7 +59,8 @@ class RateGate:
             try:
                 response = request()
             finally:
-                self.next_request = time.monotonic() + interval
+                jitter = random.uniform(0, min(1, interval * 0.25))
+                self.next_request = time.monotonic() + interval + jitter
             if isinstance(response, dict):
                 status, headers = response.get("status"), response.get("headers", {})
             elif isinstance(response, tuple):

@@ -107,6 +107,10 @@ counts. Hero rates select an intact provider dataset; class rates use that
 dataset's class totals or compatible direct role records. Provider percentages
 are never averaged. Combined modes sum counts before division. Selection,
 disagreements, missing modes, and counting bases remain visible in metadata.
+If one requested mode has no overall counts, the complete-scope overall fields
+remain null; `partial_result` exposes the available counts/rate and
+`included_modes` explicitly. Consumers may display that result with a coverage
+notice. A failed provider does not discard valid results from other providers.
 Hero participation counts can differ from unique match counts, especially when
 players switch heroes; normal results cannot guarantee the precise result.
 
@@ -172,7 +176,8 @@ win-rate functions. After a provider returns HTTP 429, remaining summary request
 to that provider are skipped for the calculation; other providers still run.
 HTTP and browser API requests share a process-wide guard per provider, including
 across client instances and client restarts within that process. Requests are
-serialized and spaced one second apart by default. HTTP 429 establishes a
+serialized and spaced at least one second apart by default, with additional
+random delay up to 25% of the interval (capped at one second). HTTP 429 establishes a
 cooldown using `Retry-After` (seconds or HTTP date), or 30 seconds with exponential
 backoff up to five minutes when the header is absent. Requests during cooldown
 fail locally without hitting the provider; valid cached responses remain usable.

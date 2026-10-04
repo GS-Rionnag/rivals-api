@@ -17,7 +17,7 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
 
 - Distribution: `rivals-api`; preferred import: `rivals_api`.
 - Compatibility: `rivalsdata` and `RivalsDataClient` remain aliases.
-- Version: `5.1.0`.
+- Version: `5.2.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsClient`.

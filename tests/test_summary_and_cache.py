@@ -286,3 +286,57 @@ def test_rate_limited_primary_does_not_block_other_summary_sources(monkeypatch):
         result = stats.win_rate(season=20)
         assert result.win_rate_pct == 60
         assert calls == ['/player/stats/heroes']
+
+
+@pytest.mark.parametrize('failed', ['rivalsdata', 'rivalstracker', 'tracker'])
+def test_each_failed_source_keeps_other_sources_hero_and_class_results(monkeypatch, failed):
+    with RivalsClient() as client:
+        stats = PlayerStats(client, 123)
+
+        def post(path, **kwargs):
+            if failed == 'rivalsdata':
+                raise RivalsDataHTTPError('HTTP 429')
+            if path.endswith('/heroes'):
+                return [{'hero_id': 1055, 'competitive': {'games': 10, 'wins': 6},
+                         'quickplay': {'games': 5, 'wins': 3}}]
+            if path.endswith('/maps'):
+                return [{'competitive': {'games': 10, 'wins': 6}, 'quickplay': {'games': 5, 'wins': 3}}]
+            return {}
+
+        def rt(*args, **kwargs):
+            if failed == 'rivalstracker':
+                raise RivalsDataHTTPError('private')
+            return {'player': {'_id': 123}, 'stats': {
+                'ranked_matches': 10, 'ranked_matches_wins': 6,
+                'unranked_matches': 5, 'unranked_matches_wins': 3},
+                'heroes_ranked': {'1055': {'matches': 10, 'win': 6}},
+                'heroes_unranked': {'1055': {'matches': 5, 'win': 3}}}
+
+        def tracker(path, params=None):
+            if failed == 'tracker':
+                raise RivalsDataHTTPError('browser unavailable')
+            return {'metadata': {}} if params is None else []
+
+        monkeypatch.setattr(stats, '_post', post)
+        monkeypatch.setattr(client, '_tracker_path', lambda uid: '/profile/test')
+        monkeypatch.setattr(client.providers.rt, 'request', rt)
+        monkeypatch.setattr(client.providers.tracker, 'request', tracker)
+        monkeypatch.setattr(PlayerMatches, 'fetch', lambda *a, **k: pytest.fail('History requested'))
+        assert stats.win_rate(season=20).win_rate_pct == 60
+        for name in ('hero_win_rates', 'class_win_rates'):
+            result = getattr(stats, name)(season=20)
+            assert result.data[0].win_rate_pct == 60
+            assert failed not in result.metadata.sources
+            assert any(e.source == failed for e in result.metadata.provider_errors)
+
+
+def test_partial_overall_exposes_available_counts_with_explicit_mode(monkeypatch):
+    with RivalsClient(enrich=False) as client:
+        stats = PlayerStats(client, 123)
+        monkeypatch.setattr(stats, '_post', lambda path, **k: [
+            {'competitive': {'games': 10, 'wins': 6}}] if path.endswith('/maps') else [])
+        result = stats.win_rate(season=20)
+        assert result.win_rate_pct is None
+        assert result.partial_result.win_rate_pct == 60
+        assert result.partial_result.included_modes == ['competitive']
+        assert result.metadata.coverage.missing_overall_modes == ['quickplay']

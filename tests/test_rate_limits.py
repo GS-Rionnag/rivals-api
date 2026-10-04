@@ -140,3 +140,14 @@ def test_invalid_settings_are_rejected(value):
     for name in ('request_interval', 'rate_limit_cooldown'):
         with pytest.raises(ValueError, match=name):
             RivalsClient(**{name: value})
+
+
+def test_jitter_adds_delay_without_shortening_requested_spacing(monkeypatch, clock):
+    now, sleeps = clock
+    monkeypatch.setattr('rivals_api.rate_limits.random.uniform', lambda low, high: high)
+    gate = RateGate('test')
+    request = lambda: SimpleNamespace(status_code=200)
+    gate.run(request, interval=3)
+    gate.run(request, interval=3)
+    assert sleeps == [3.75]
+    assert now[0] == 103.75
