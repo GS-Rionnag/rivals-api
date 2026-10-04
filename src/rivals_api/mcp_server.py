@@ -55,7 +55,7 @@ PLAYER_DASHBOARD_APP_HTML = """<!doctype html>
 body{font:14px system-ui,-apple-system,Segoe UI,sans-serif}
 iframe{display:block;border:0;width:100%;height:100%;min-height:600px}
 #status{padding:18px;color:#a9adb6}</style></head><body>
-<div id="status">Loading Rivals API dashboard…</div>
+<div id="status">Loading Rivals API dashboardâ€¦</div>
 <script>
 addEventListener('message', event => {
   const message = event.data;
@@ -190,8 +190,8 @@ def show_player_dashboard(
     player_name = str(player.get("name", uid_or_name))
     name = escape(player_name)
     uid = escape(str(player.get("uid", "")))
-    level = escape(str(player.get("level", "—")))
-    xp = escape(str(player.get("xp", "—")))
+    level = escape(str(player.get("level", "â€”")))
+    xp = escape(str(player.get("xp", "â€”")))
     rank_data = player.get("rank_game_season", {})
     rank_text = "Rank data unavailable"
     competitive_summary = ""
@@ -267,13 +267,13 @@ def show_player_dashboard(
         assists = escape(str(row.get("assists", 0)))
         form_marks.append(
             f'<span class="form-mark {"win" if did_win else "loss"}" '
-            f'title="{label} · {kills}/{deaths}/{assists}" aria-label="{label}, '
+            f'title="{label} Â· {kills}/{deaths}/{assists}" aria-label="{label}, '
             f'{kills} kills, {deaths} deaths, {assists} assists">{outcome}</span>'
         )
     recent_section = (
         '<section class="section"><div class="section-head"><div><h2>Recent run</h2>'
         '<p class="sub">Latest visible matches</p></div>'
-        + (f'<span class="section-tag">{recent_wins}W · {len(recent) - recent_wins}L</span>' if recent else '')
+        + (f'<span class="section-tag">{recent_wins}W Â· {len(recent) - recent_wins}L</span>' if recent else '')
         + '</div>'
         + (f'<div class="form-strip">{"".join(form_marks)}</div>'
            f'<div class="form-foot"><span>Last {len(recent)} games</span>'
@@ -293,18 +293,18 @@ def show_player_dashboard(
                 if isinstance(row, Mapping):
                     player_name = escape(str(row.get("name", "Unknown player")))
                     team_id = str(row.get("side", row.get("team_id", "Unknown side")))
-                    rank = escape(str(row.get("rank", "—")))
-                    wins = escape(str(row.get("wins", "—")))
-                    losses = escape(str(row.get("losses", "—")))
+                    rank = escape(str(row.get("rank", "â€”")))
+                    wins = escape(str(row.get("wins", "â€”")))
+                    losses = escape(str(row.get("losses", "â€”")))
                     top_heroes = row.get("top_heroes", [])
                     hero_label = ""
                     if isinstance(top_heroes, list) and top_heroes:
                         hero_label = escape(", ".join(
                             hero_name(hero) or str(hero) for hero in top_heroes[:2]
                         ))
-                    detail = f"Rank {rank} · {wins}W/{losses}L"
+                    detail = f"Rank {rank} Â· {wins}W/{losses}L"
                     if hero_label:
-                        detail += f" · {hero_label}"
+                        detail += f" Â· {hero_label}"
                     teams.setdefault(team_id, []).append(
                         f'<li><span>{player_name}</span><small>{detail}</small></li>'
                     )
@@ -430,17 +430,17 @@ justify-content:space-between;flex-wrap:wrap;color:#a9adb6;font-size:10px;font-v
 def get_player_heroes(
     uid_or_name: str, season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
+    method: Literal["normal", "precise"] = "normal",
 ) -> Any:
-    """List heroes with match-attributed win rates and coverage metadata.
+    """Use scoped provider summaries by default, without requesting match history.
 
-    Defaults to current-season Competitive plus Quickplay. Each match counts once for its
-    longest-played hero. Ties and missing detail remain unresolved. Caching and
-    provider reads are automatic; no complete game-history coverage is claimed.
-    Season accepts "current" (also the omitted default), a positive provider season
-    ID, or "all" for all available tracked seasons.
+    method="precise" verifies completed matches with incremental persistent caching.
+    Defaults to the current season and Competitive plus Quickplay; Custom/Arcade
+    are excluded. Season accepts "current", a positive provider ID, or "all".
+    Sources, counting basis, disagreements and incomplete coverage remain visible.
     """
     return _call(lambda client: client.get_player(uid_or_name).stats.hero_win_rates(
-        season=season, mode=mode))
+        season=season, mode=mode, method=method))
 
 
 @mcp.tool()
@@ -473,18 +473,18 @@ def get_player_win_rate(
     uid_or_name: str,
     season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
+    method: Literal["normal", "precise"] = "normal",
 ) -> Any:
-    """Get season win rate from career counts checked against combined history.
+    """Use scoped provider summaries by default, without requesting match history.
 
-    Defaults to the current season and Competitive plus Quickplay. All excludes
-    Custom/Arcade. Intact counts are selected per mode, never averaged rates.
-    Metadata records disagreements, history verification and partial fallbacks.
-    Season accepts "current" (also the omitted default), a positive provider season
-    ID, or "all" for all available tracked seasons.
+    method="precise" verifies completed matches with incremental persistent caching.
+    Defaults to the current season and Competitive plus Quickplay; Custom/Arcade
+    are excluded. Season accepts "current", a positive provider ID, or "all".
+    Sources, counting basis, disagreements and incomplete coverage remain visible.
     """
     def fetch(client: RivalsClient, value: str, **filters: Any) -> Any:
         return client.get_player(value).stats.win_rate(**filters)
-    return _call(fetch, uid_or_name, season=season, mode=mode)
+    return _call(fetch, uid_or_name, season=season, mode=mode, method=method)
 
 
 @mcp.tool()
@@ -492,15 +492,18 @@ def get_player_hero_win_rates(
     uid_or_name: str,
     season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
+    method: Literal["normal", "precise"] = "normal",
 ) -> Any:
-    """Return longest-played-hero win rates with coverage; caching is automatic.
+    """Use scoped provider summaries by default, without requesting match history.
 
-    Season accepts "current" (also the omitted default), a positive provider season
-    ID, or "all" for all available tracked seasons.
+    method="precise" verifies completed matches with incremental persistent caching.
+    Defaults to the current season and Competitive plus Quickplay; Custom/Arcade
+    are excluded. Season accepts "current", a positive provider ID, or "all".
+    Sources, counting basis, disagreements and incomplete coverage remain visible.
     """
     return _call(lambda client, value, **filters:
                  client.get_player(value).stats.hero_win_rates(**filters),
-                 uid_or_name, season=season, mode=mode)
+                 uid_or_name, season=season, mode=mode, method=method)
 
 
 @mcp.tool()
@@ -508,15 +511,18 @@ def get_player_class_win_rates(
     uid_or_name: str,
     season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
+    method: Literal["normal", "precise"] = "normal",
 ) -> Any:
-    """Return class win rates from each match's longest-played hero and coverage.
+    """Use scoped provider summaries by default, without requesting match history.
 
-    Season accepts "current" (also the omitted default), a positive provider season
-    ID, or "all" for all available tracked seasons.
+    method="precise" verifies completed matches with incremental persistent caching.
+    Defaults to the current season and Competitive plus Quickplay; Custom/Arcade
+    are excluded. Season accepts "current", a positive provider ID, or "all".
+    Sources, counting basis, disagreements and incomplete coverage remain visible.
     """
     return _call(lambda client, value, **filters:
                  client.get_player(value).stats.class_win_rates(**filters),
-                 uid_or_name, season=season, mode=mode)
+                 uid_or_name, season=season, mode=mode, method=method)
 
 
 @mcp.tool()
@@ -524,14 +530,14 @@ def get_player_stats(
     uid_or_name: str, category: str = "heroes",
     season: int | Literal["current", "all"] | None = None,
     mode: Literal["competitive", "quickplay", "all"] = "all",
+    method: Literal["normal", "precise"] = "normal",
 ) -> Any:
-    """Get player stats: heroes, maps, bans, or calculated classes.
+    """Use scoped provider summaries by default, without requesting match history.
 
-    Heroes/classes default to current-season Competitive plus Quickplay. Each match counts
-    once for its longest-played hero and that hero's class. Coverage reports
-    ties, missing playtime, and conflicts. Supply a season ID or "all" for all
-    available tracked history. "current" explicitly selects the current season.
-    Maps/bans retain their provider selectors when season is omitted.
+    method="precise" verifies completed matches with incremental persistent caching.
+    Defaults to the current season and Competitive plus Quickplay; Custom/Arcade
+    are excluded. Season accepts "current", a positive provider ID, or "all".
+    Sources, counting basis, disagreements and incomplete coverage remain visible.
     """
     methods = {"heroes": "heroes", "maps": "maps", "bans": "bans", "classes": "classes"}
     if category not in methods:
@@ -548,6 +554,7 @@ def get_player_stats(
         filters: dict[str, Any] = {"season": season_id}
         if category in ("heroes", "classes"):
             filters["mode"] = mode
+            filters["method"] = method
         if category == "heroes":
             return player.stats.hero_win_rates(**filters)
         return getattr(player.stats, methods[category])(**filters)

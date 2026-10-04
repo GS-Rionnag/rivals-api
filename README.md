@@ -100,25 +100,22 @@ print(rate.wins, rate.games, rate.win_rate_pct)
 print(rate.metadata.by_mode, rate.metadata.coverage)
 ```
 
-Overall rates select intact career wins/games records per mode and check them
-against deduplicated history. Provider percentages are never averaged. The
-combined rate sums selected Competitive and Quickplay counts before division;
-it never uses a provider's potentially broader `all` record. Agreement and
-matching history support selection; unresolved disagreements stay visible.
-RivalsData rank-system battle counts remain diagnostic observations because
-their equivalence to career matches is unverified. Missing career records fall
-back to tracked outcomes, explicitly marked in coverage. Unknown outcomes are
-excluded from fallback denominators. Overall outcomes do not require hero
-playtime. Complete game-history coverage is never claimed.
+All three win-rate functions default to `method="normal"`, which reads provider
+summaries without requesting match history or match details. Overall rates
+prefer direct career counts, then map totals, then explicitly marked rank-system
+counts. Hero rates select an intact provider dataset; class rates use that
+dataset's class totals or compatible direct role records. Provider percentages
+are never averaged. Combined modes sum counts before division. Selection,
+disagreements, missing modes, and counting bases remain visible in metadata.
+Hero participation counts can differ from unique match counts, especially when
+players switch heroes; normal results cannot guarantee the precise result.
 
 The old `player.win_rate` property and profile-overview `win_rate` field remain
 competitive profile snapshots for compatibility. They do not invoke the new
 season/history verification. Use `player.stats.win_rate()` or MCP
 `get_player_win_rate` for the canonical selectable season calculation.
 
-Hero and class win rates count each retrieved match once, assigning its result
-to the hero you played longest and that hero's class. Ordinary requests need
-no calculation-method argument:
+Ordinary hero and class requests need no calculation-method argument:
 
 ```python
 heroes = player.stats.heroes()  # Current season, both modes, most played first
@@ -134,12 +131,23 @@ print(rates.metadata.unresolved)
 
 `player.heroes.fetch()` uses the same calculation. `get_player_heroes` and
 `get_player_stats(category="heroes")` return a `data` list plus `metadata`;
-hero/class win-rate MCP tools no longer expose `method`. All default to
+all win-rate MCP tools accept `method="normal"` or `"precise"`. All default to
 Competitive plus Quickplay and resolve the current season from live Tracker profile metadata.
 If that season cannot be verified, supply a numeric season or `"all"`.
 `"all"` means all available tracked history, not guaranteed lifetime coverage.
 Class responses retain `.classes`, with direct counts and the selected mode's
 nested counts; hero rows likewise retain the selected mode's nested stats.
+
+Use `method="precise"` to traverse all available history and verify completed
+match outcomes. Hero and class rates assign each match once to its longest-played
+hero and that hero's class; overall outcomes do not require hero playtime.
+
+```python
+overall = player.stats.win_rate(season=20, method="precise")
+heroes = player.stats.hero_win_rates(season=20, method="precise")
+classes = player.stats.class_win_rates(season=20, method="precise")
+print(overall.metadata.cache)
+```
 
 Match details supply per-hero seconds. Complete provider records are compared
 independently: durations are never blended across sources. Missing/invalid
@@ -149,9 +157,22 @@ summary-hero fallback. Coverage reports found, attributed, and unresolved
 matches; it never claims complete game history. `play_time` is the assigned
 hero's playtime in its attributed matches, not total lifetime hero playtime.
 
-First requests can load details for every retrieved match. Caching is automatic:
-successful detail reads are reused and hero/class queries share their calculation
-within the client's cache TTL. Incomplete calculations are retried.
+The first precise request can load every history page and match detail. History
+and details persist in SQLite across client restarts. Later requests refresh each
+provider's newest pages, stop when they encounter a retained match on a previously
+completed, chronological traversal, and combine new matches with the cached tail.
+Each provider has its own stopping point. Interrupted or unordered traversals
+do not establish a stopping point. Missing or incomplete details are retried.
+This assumes providers do not backfill older history behind the cached boundary;
+available tracked history still cannot guarantee complete game history.
+
+Short-lived calculation caches use `provider_cache_ttl` (60 seconds by default).
+Pass `RivalsClient(cache_dir="path/to/cache")` to choose the persistent location,
+or set `RIVALS_API_CACHE_DIR`. The default is the user's local application cache.
+`persist_cache=False` keeps evidence only in memory for that client. To rebuild
+the retained history from scratch, close clients and remove `matches.sqlite3`
+from that cache directory. `client.matches.get(id, refresh=True)` refreshes a
+specific completed detail when necessary.
 
 For the old provider-summary definitions, use `player.heroes.summary()`,
 `player.stats.summary_heroes(mode="competitive")`, or

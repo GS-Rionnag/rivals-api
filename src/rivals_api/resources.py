@@ -251,9 +251,10 @@ class PlayerHeroes(PlayerResource):
     """Per-player hero summary rows from ``POST /player/heroes``."""
 
     def fetch(self, *, season: int | Literal["current", "all"] | None = None,
-              mode: Literal["competitive", "quickplay", "all"] = "all") -> list[HeroStatsRecord]:
+              mode: Literal["competitive", "quickplay", "all"] = "all",
+              method: Literal["normal", "precise"] = "normal") -> list[HeroStatsRecord]:
         """List match-attributed heroes; all includes Competitive and Quickplay."""
-        return PlayerStats(self._client, self.uid).heroes(season=season, mode=mode)
+        return PlayerStats(self._client, self.uid).heroes(season=season, mode=mode, method=method)
 
     def summary(self, *, season: int | Literal["all"] | None = None) -> list[Character]:
         """Fetch hero summaries for one season or all seasons.
@@ -272,42 +273,57 @@ class PlayerStats(PlayerResource):
     def heroes(
         self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
         season: int | Literal["current", "all"] | None = None,
+        method: Literal["normal", "precise"] = "normal",
     ) -> list[HeroStatsRecord]:
-        """Canonical hero records: one result for the longest-played hero per match.
+        """Provider hero summaries, or longest-played match attribution in precise mode.
 
         No summary fallback is used for attribution. Each row includes coverage
         metadata; use hero_win_rates() to inspect coverage even for an empty list.
         """
-        result = self.hero_win_rates(mode=mode, season=season)
+        result = self.hero_win_rates(mode=mode, season=season, method=method)
         return [HeroStatsRecord({**row.to_dict(), mode: row.to_dict(), "mode": mode,
                                  "provider_metadata": result.metadata.to_dict()})
                 for row in result.data]
 
     def win_rate(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                 season: int | Literal["current", "all"] | None = None) -> DataModel:
-        """Select intact season career counts and check them against match history.
+                 season: int | Literal["current", "all"] | None = None,
+                 method: Literal["normal", "precise"] = "normal") -> DataModel:
+        """Summary counts by default; precise verifies each tracked match's outcome."""
+        from .stat_scope import validate_method
 
-        Defaults to the current season and Competitive plus Quickplay. History
-        fallback and unresolved provider disagreements are explicit in metadata.
-        Use a positive season ID for one season, or season="all" for all available
-        tracked seasons. season="current" explicitly selects the default season.
-        """
-        from .season_rates import calculate
+        if validate_method(method) == "precise":
+            from .season_rates import calculate_precise
 
-        return DataModel(calculate(self, season=season, mode=mode))
+            return DataModel(calculate_precise(self, season=season, mode=mode))
+        from .summary_rates import calculate
+
+        result = calculate(self, season=season, mode=mode)
+        return DataModel({**result["overall"], "metadata": result["metadata"]})
 
     def hero_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                       season: int | Literal["current", "all"] | None = None) -> DataModel:
-        """Hero rates for current, a positive season ID, or all tracked seasons."""
-        from .attribution import calculate
+                       season: int | Literal["current", "all"] | None = None,
+                       method: Literal["normal", "precise"] = "normal") -> DataModel:
+        """Summary hero rates; precise attributes each match to its longest-played hero."""
+        from .stat_scope import validate_method
+
+        if validate_method(method) == "precise":
+            from .attribution import calculate
+        else:
+            from .summary_rates import calculate
 
         result = calculate(self, season=season, mode=mode)
         return DataModel({"data": result["heroes"], "metadata": result["metadata"]})
 
     def class_win_rates(self, *, mode: Literal["competitive", "quickplay", "all"] = "all",
-                        season: int | Literal["current", "all"] | None = None) -> DataModel:
-        """Class rates for current, a positive season ID, or all tracked seasons."""
-        from .attribution import calculate
+                        season: int | Literal["current", "all"] | None = None,
+                        method: Literal["normal", "precise"] = "normal") -> DataModel:
+        """Summary class rates; precise uses each match's longest-played hero's class."""
+        from .stat_scope import validate_method
+
+        if validate_method(method) == "precise":
+            from .attribution import calculate
+        else:
+            from .summary_rates import calculate
 
         result = calculate(self, season=season, mode=mode)
         return DataModel({"data": result["classes"], "metadata": result["metadata"]})
@@ -440,9 +456,10 @@ class PlayerStats(PlayerResource):
     def classes(
         self, *, season: int | Literal["current", "all"] | None = None,
         mode: Literal["competitive", "quickplay", "all"] = "all",
+        method: Literal["normal", "precise"] = "normal",
     ) -> ClassStatsResponse:
         """Class results use each match's longest-played hero, once per match."""
-        result = self.class_win_rates(season=season, mode=mode)
+        result = self.class_win_rates(season=season, mode=mode, method=method)
         return ClassStatsResponse({
             "classes": [{**row.to_dict(), mode: row.to_dict()} for row in result.data],
             "excluded": result.metadata.unresolved,
@@ -554,6 +571,7 @@ class PlayerMatches(PlayerResource):
         season: int | None = None,
         mode: str | None = None, hero: str | int | None = None,
         teammate: str | int | None = None, cached: bool = True,
+        incremental: bool = False,
     ) -> MatchHistory:
         if limit != "all" and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
             raise ValueError("limit must be a positive integer or 'all'")
@@ -565,6 +583,16 @@ class PlayerMatches(PlayerResource):
         if teammate is not None:
             teammate = int(teammate) if str(teammate).isdecimal() else int(
                 self._client.resolve_player(str(teammate))["uid"])
+        if incremental:
+            if limit != "all" or cursor is not None or hero is not None or teammate is not None or not cached:
+                raise ValueError("incremental history requires all cached pages without cursor/hero/teammate filters")
+            from .cache import incremental_history
+
+            result = incremental_history(self, season=season)
+            if mode is not None:
+                selected = self._select_cached_rows([r.to_dict() for r in result.matches], mode=mode)
+                return MatchHistory({**result.to_dict(), "matches": selected}, client=self._client)
+            return result
         include_rt = bool(getattr(self._client, "enrich", False))
         from .history import fetch_history
 
@@ -620,31 +648,28 @@ class PlayerMatches(PlayerResource):
         yield from self.fetch(limit="all", **filters).matches
 
     def fetch_win_rate(
-        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
+        self, *, method: Literal["normal", "precise", "estimate", "exact", "cached"] | None = None,
         season: int | Literal["all"] | None = None,
         mode: Literal["competitive", "quickplay", "all"] = "all",
         hero: str | int | None = None, teammate: str | int | None = None,
         cached: bool = True,
     ) -> DataModel:
-        """Select season records automatically; method is a legacy override.
+        """Select scoped summaries by default, or completed outcomes with precise.
 
-        ``estimate`` is fast and averages the current competitive win rates
-        reported by RivalsData and RivalsTracker. ``exact`` traverses all
+        ``estimate`` aliases normal summaries. Legacy ``exact`` traverses all
         matching history pages. ``cached`` performs no requests and requires a
         prior complete, unfiltered ``fetch(limit="all")`` on this client.
         """
-        if method is None:
+        if method in (None, "normal", "precise"):
             if hero is not None or teammate is not None:
                 raise ValueError("Season win rate does not accept hero/teammate filters; use the hero stats or history API")
-            return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode or "all")
+            return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode, method=method or "normal")
         if method not in ("estimate", "exact", "cached"):
-            raise ValueError("method must be estimate, exact, or cached")
+            raise ValueError("method must be normal, precise, estimate, exact, or cached")
         if method == "estimate":
-            if mode == "all" and hero is None and teammate is None:
-                return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode)
-            if hero is not None or teammate is not None or mode not in (None, "competitive"):
-                raise ValueError("summary estimates support competitive overall only; use method='exact'")
-            return self._estimated_overall_win_rate(season=season)
+            if hero is not None or teammate is not None:
+                raise ValueError("summary estimates do not support hero/teammate filters; use method='exact'")
+            return PlayerStats(self._client, self.uid).win_rate(season=season, mode=mode)
         if method == "cached":
             rows, entry = self._cached_history(season=season, mode=mode, hero=hero,
                                                teammate=teammate, cached=cached)
@@ -774,17 +799,14 @@ class PlayerMatches(PlayerResource):
         return selected
 
     def fetch_hero_win_rates(
-        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
+        self, *, method: Literal["normal", "precise", "estimate", "exact", "cached"] | None = None,
         season: int | Literal["all"] | None = None,
         mode: Literal["competitive", "quickplay", "all"] = "all",
     ) -> DataModel:
-        """Canonical match attribution by default; method is a legacy override."""
-        if method is None or method == "exact":
-            return PlayerStats(self._client, self.uid).hero_win_rates(season=season, mode=mode)
-        if method == "estimate":
-            if mode == "all":
-                return PlayerStats(self._client, self.uid).hero_win_rates(season=season, mode=mode)
-            return self._estimated_character_rates(mode=mode, season=season, group="hero")
+        """Summary rates by default; precise verifies completed match attribution."""
+        if method in (None, "normal", "precise", "exact", "estimate"):
+            return PlayerStats(self._client, self.uid).hero_win_rates(
+                season=season, mode=mode, method=method or "normal")
         rows, sources, errors = self._history_for_character_rates(
             method=method, season=season, mode=mode)
         stats = self._character_match_rates(rows, group="hero", exact=method == "exact")
@@ -792,17 +814,14 @@ class PlayerMatches(PlayerResource):
                           "provider_errors": errors, "scope": {"season": season, "mode": mode}})
 
     def fetch_class_win_rates(
-        self, *, method: Literal["estimate", "exact", "cached"] | None = None,
+        self, *, method: Literal["normal", "precise", "estimate", "exact", "cached"] | None = None,
         season: int | Literal["all"] | None = None,
         mode: Literal["competitive", "quickplay", "all"] = "all",
     ) -> DataModel:
-        """Canonical match attribution by default; method is a legacy override."""
-        if method is None or method == "exact":
-            return PlayerStats(self._client, self.uid).class_win_rates(season=season, mode=mode)
-        if method == "estimate":
-            if mode == "all":
-                return PlayerStats(self._client, self.uid).class_win_rates(season=season, mode=mode)
-            return self._estimated_character_rates(mode=mode, season=season, group="class")
+        """Summary rates by default; precise verifies completed match attribution."""
+        if method in (None, "normal", "precise", "exact", "estimate"):
+            return PlayerStats(self._client, self.uid).class_win_rates(
+                season=season, mode=mode, method=method or "normal")
         rows, sources, errors = self._history_for_character_rates(
             method=method, season=season, mode=mode)
         stats = self._character_match_rates(rows, group="class", exact=method == "exact")

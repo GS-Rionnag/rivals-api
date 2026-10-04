@@ -2,9 +2,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from rivals_api import Match, MatchHistory, RivalsClient, RivalsDataHTTPError
+from rivals_api import DataModel, Match, MatchHistory, RivalsClient, RivalsDataHTTPError
 from rivals_api.resources import PlayerMatches, PlayerStats
-from rivals_api.season_rates import counts
+from rivals_api.season_rates import calculate, counts
+
+
+def checked_rate(stats, **filters):
+    """Retain regression checks for the legacy career/history reconciliation helper."""
+    return DataModel(calculate(stats, **filters))
 
 
 def matches(mode_id, games, wins):
@@ -64,15 +69,15 @@ def test_all_default_uses_disjoint_mode_counts_and_excludes_custom(setup):
     client, data = setup
     data["rows"] += matches(3, 5, 5) + matches(4, 7, 7)
     stats = PlayerStats(client, 691218686)
-    result = stats.win_rate()
+    result = checked_rate(stats)
     assert (result.games, result.wins, result.losses, result.win_rate_pct) == (60, 28, 32, 46.67)
     assert result.metadata.scope.mode == "all" and result.metadata.scope.season == 20
     assert result.metadata.coverage.history_matches_record
     assert result.metadata.by_mode.competitive.selection_reason == "provider_record_agreement"
     assert result.metadata.provider_records[0].eligible is False
     assert result.metadata.provider_records[0].games == 26
-    assert stats.win_rate(mode="competitive").win_rate_pct == 44
-    assert stats.win_rate(mode="quickplay").win_rate_pct == 48.57
+    assert checked_rate(stats, mode="competitive").win_rate_pct == 44
+    assert checked_rate(stats, mode="quickplay").win_rate_pct == 48.57
     assert {params["mode"] for source, params in data["calls"]
             if source == "tracker" and params} == {"competitive", "quick-match"}
 
@@ -82,7 +87,7 @@ def test_history_match_can_outweigh_larger_disagreeing_record(setup):
     data["rt"]["competitive"] = (10, 5)
     data["tracker"]["competitive"] = (8, 4)
     data["rows"] = matches(2, 8, 4)
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.games == 8 and result.metadata.by_mode.competitive.source == "tracker"
     assert result.metadata.by_mode.competitive.selection_reason == "matches_tracked_history"
     assert len(result.metadata.by_mode.competitive.conflicts) == 1
@@ -93,7 +98,7 @@ def test_no_averaging_when_disagreement_remains_unresolved(setup):
     data["rt"]["competitive"] = (10, 6)
     data["tracker"]["competitive"] = (11, 6)
     data["rows"] = matches(2, 2, 1)
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.win_rate_pct == 60
     assert result.metadata.selection_uncertain
     assert result.metadata.by_mode.competitive.conflicts[0].games == 11
@@ -104,7 +109,7 @@ def test_wrong_season_overview_falls_back_to_history(setup):
     data["rt"] = {}
     data["tracker_season"] = 19
     data["rows"] = matches(2, 3, 2)
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive", season=20)
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive", season=20)
     assert (result.games, result.wins, result.win_rate_pct) == (3, 2, 66.67)
     assert result.metadata.coverage.uses_history_fallback
     assert result.metadata.by_mode.competitive.source == "tracked_history"
@@ -114,7 +119,7 @@ def test_wrong_season_overview_falls_back_to_history(setup):
 def test_career_record_survives_history_outage(setup):
     client, data = setup
     data["history_error"] = True
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.win_rate_pct == 44
     assert not result.metadata.coverage.history_matches_record
     assert result.metadata.provider_errors[0].source == "history"
@@ -123,7 +128,7 @@ def test_career_record_survives_history_outage(setup):
 def test_conflicting_counts_are_rejected_when_below_verified_history(setup):
     client, data = setup
     data["rt"]["competitive"] = (20, 11)
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.metadata.by_mode.competitive.source == "tracker"
     assert result.metadata.by_mode.competitive.rejected_records[0].reason == "contradicts_tracked_history"
 
@@ -136,7 +141,7 @@ def test_overall_outcomes_do_not_require_hero_playtime(setup, monkeypatch):
     monkeypatch.setattr(client.matches, "get", lambda *a: Match({
         "teams": [{"players": [{"uid": 691218686, "is_win": True, "heroes": []}]}],
         "provider_metadata": {"sources": ["rivalsdata"], "evidence": {"rivalsdata": {"complete": True}}}}))
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert (result.games, result.wins, result.win_rate_pct) == (1, 1, 100)
 
 
@@ -149,7 +154,7 @@ def test_unknown_results_do_not_become_losses_in_history_fallback(setup, monkeyp
     def failed(*a):
         raise RivalsDataHTTPError("offline")
     monkeypatch.setattr(client.matches, "get", failed)
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.games == 1 and result.losses == 0
     assert result.metadata.coverage.unknown_results == 1
 
@@ -175,7 +180,7 @@ def test_overall_mcp_schema_and_default_scope(setup, monkeypatch):
     assert server.get_player_win_rate("GS-4").games == 60
     tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
     schema = tools["get_player_win_rate"].inputSchema["properties"]
-    assert "method" not in schema and "cached" not in schema
+    assert schema["method"]["default"] == "normal" and "cached" not in schema
     assert schema["mode"]["default"] == "all"
     assert set(schema["mode"]["enum"]) == {"all", "competitive", "quickplay"}
     for name in ("get_player_win_rate", "get_player_hero_win_rates",
@@ -195,7 +200,7 @@ def test_zero_season_record_has_no_percentage(setup):
     data["rt"]["competitive"] = (0, 0)
     data["tracker"]["competitive"] = (0, 0)
     data["rows"] = []
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert result.games == 0 and result.win_rate_pct is None
     assert not result.metadata.coverage.history_matches_record
 
@@ -209,13 +214,13 @@ def test_conflicting_summary_outcome_uses_completed_detail_without_hero_attribut
     monkeypatch.setattr(client.matches, "get", lambda *a: Match({
         "teams": [{"players": [{"uid": 691218686, "is_win": False, "heroes": []}]}],
         "provider_metadata": {"sources": ["rivalsdata"], "evidence": {"rivalsdata": {"complete": True}}}}))
-    result = PlayerStats(client, 691218686).win_rate(mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), mode="competitive")
     assert (result.wins, result.losses, result.win_rate_pct) == (0, 1, 0)
 
 
 def test_all_seasons_uses_tracked_history_without_career_default_contamination(setup):
     client, data = setup
-    result = PlayerStats(client, 691218686).win_rate(season="all")
+    result = checked_rate(PlayerStats(client, 691218686), season="all")
     assert result.games == 60 and result.metadata.scope.season == "all"
     assert result.metadata.coverage.uses_history_fallback
     assert not any(source in ("rt", "tracker") for source, _params in data["calls"])
@@ -223,7 +228,7 @@ def test_all_seasons_uses_tracked_history_without_career_default_contamination(s
 
 def test_numeric_season_keeps_career_and_history_requests_scoped(setup):
     client, data = setup
-    result = PlayerStats(client, 691218686).win_rate(season=19, mode="competitive")
+    result = checked_rate(PlayerStats(client, 691218686), season=19, mode="competitive")
     assert result.metadata.scope.season == 19
     assert all(params["season"] == 19 for source, params in data["calls"]
                if source in ("rt", "history") or source == "tracker" and params)
@@ -243,7 +248,7 @@ def test_default_win_rate_survives_missing_tracker_current(setup, monkeypatch):
 
     monkeypatch.setattr(client.providers.tracker, "request", tracker)
     monkeypatch.setattr(client.providers.rt, "request", rt)
-    result = PlayerStats(client, 691218686).win_rate(season="current")
+    result = checked_rate(PlayerStats(client, 691218686), season="current")
     assert result.metadata.scope.season == 20 and result.games == 60
     assert not result.metadata.coverage.uses_history_fallback
 

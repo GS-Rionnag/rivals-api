@@ -14,7 +14,8 @@ PREFIX = "rivals:v1:"
 
 
 def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
-                  teammate=None, cached=True, limit=None, include_rt=True):
+                  teammate=None, cached=True, limit=None, include_rt=True,
+                  stop_at=None, refresh=False):
     mode = mode_id(mode)
     scope = {"uid": resource.uid, "season": season, "mode": mode,
              "hero": str(hero) if hero is not None else None,
@@ -45,6 +46,29 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
     rows = {str(row["match_uid"]): row for row in state.pop("pending", [])
             if isinstance(row, dict) and row.get("match_uid") is not None}
     errors = []
+    observed = {}
+    progress = state.setdefault("progress", {})
+
+    def checkpoint(source, candidates):
+        record = progress.setdefault(source, {"ordered": True, "last": None, "failed": False})
+        identifiers = observed.setdefault(source, [])
+        overlap = False
+        for candidate in candidates:
+            identifier = candidate.get("match_uid")
+            if not identifier or (season is not None and str(candidate.get("season")) != str(season)):
+                continue
+            identifiers.append(str(identifier))
+            current = timestamp(candidate.get("timestamp"))
+            if not current or record["last"] is not None and current > record["last"]:
+                record["ordered"] = False
+            record["last"] = current
+            overlap |= str(identifier) in (stop_at or {}).get(source, set())
+        cutoff = overlap and record["ordered"]
+        record["cutoff"] = record.get("cutoff", False) or cutoff
+        return cutoff
+
+    def failed(source):
+        progress.setdefault(source, {"ordered": True, "last": None})["failed"] = True
     primary = {}
     successes = 0
     sources = []
@@ -62,6 +86,7 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                 raise RivalsDataHTTPError("RivalsData returned invalid match history")
             successes += 1
             sources.append("rivalsdata")
+            cutoff = checkpoint("rivalsdata", primary["matches"])
             for row in primary["matches"]:
                 identifier = str(row.get("match_uid", ""))
                 # The uncached upstream route may ignore selectors. Never
@@ -94,15 +119,22 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                     rows[identifier] = {**row, "provider_metadata": {"sources": ["rivalsdata"],
                         "evidence": {"rivalsdata": {"kind": "match_summary",
                                                      "scope": {"match_uid": identifier}}}}}
-            state["rd"] = primary.get("next_cursor")
-            state["rd_done"] = not bool(state["rd"])
+            next_rd = primary.get("next_cursor")
+            if next_rd is not None and next_rd == state["rd"] and not cutoff:
+                errors.append({"source": "rivalsdata", "error": "Repeated pagination token"})
+                failed("rivalsdata")
+                next_rd = None
+            state["rd"] = next_rd
+            state["rd_done"] = cutoff or not bool(state["rd"])
         except RivalsDataError as exc:
             errors.append({"source": "rivalsdata", "error": str(exc)})
             # The failing source can be retried by starting a new traversal.
             state["rd_done"] = True
+            failed("rivalsdata")
     if include_rt and teammate is not None:
         # RT does not expose this filter, and summary rows cannot verify it.
         state["rt_done"] = True
+        failed("rivalstracker")
         errors.append({"source": "rivalstracker", "error": "teammate filter unsupported"})
     if include_rt and not state["rt_done"] and teammate is None:
         # Skip duplicate-only RT pages so callers don't mistake an empty page
@@ -111,10 +143,12 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
             try:
                 data = resource._client.providers.rt.request(
                     f"/player-match-history/{resource.uid}", params={"skip": state["rt"],
-                        "game_mode_id": mode or 0, "hero_id": hero or 0, "season": season})
+                        "game_mode_id": mode or 0, "hero_id": hero or 0, "season": season},
+                    **({"refresh": True} if refresh else {}))
                 if not isinstance(data, list):
                     raise RivalsDataHTTPError("RivalsTracker returned invalid match history")
                 successes += 1
+                cutoff = checkpoint("rivalstracker", [rt_history(row) for row in data])
                 if "rivalstracker" not in sources:
                     sources.append("rivalstracker")
                 added = 0
@@ -132,17 +166,19 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                         rows[identifier] = normalized
                         added += 1
                 state["rt"] += 20
-                state["rt_done"] = len(data) < 20
+                state["rt_done"] = cutoff or len(data) < 20
                 if added or state["rt_done"] or rows:
                     break
             except RivalsDataError as exc:
                 errors.append({"source": "rivalstracker", "error": str(exc)})
                 state["rt_done"] = True
+                failed("rivalstracker")
                 break
     if include_rt and not state["tracker_done"]:
         name = resource._client._player_names.get(resource.uid)
         if teammate is not None or not name:
             state["tracker_done"] = True
+            failed("tracker")
             errors.append({"source": "tracker", "error": "teammate filter unsupported"
                            if teammate is not None else "No verified in-game name for this UID"})
         else:
@@ -152,10 +188,12 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                 try:
                     data = resource._client.providers.tracker.request(
                         "/api/v2/marvel-rivals/standard/matches/ign/" + quote(name, safe=""),
-                        params={"next": state["tracker"], "season": season})
+                        params={"next": state["tracker"], "season": season},
+                        **({"refresh": True} if refresh else {}))
                     if not isinstance(data, dict) or not isinstance(data.get("matches"), list):
                         raise RivalsDataHTTPError("Tracker returned invalid match history")
                     successes += 1
+                    cutoff = checkpoint("tracker", [tracker_history(row, name) or {} for row in data["matches"]])
                     if "tracker" not in sources:
                         sources.append("tracker")
                     added = 0
@@ -186,15 +224,17 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
                         errors.append({"source": "tracker", "error":
                                        "Skipped matches with unverified season"})
                     next_token = (data.get("metadata") or {}).get("next")
-                    state["tracker_done"] = next_token is None or next_token == state["tracker"]
+                    state["tracker_done"] = cutoff or next_token is None or next_token == state["tracker"]
                     if next_token is not None and next_token == state["tracker"]:
                         errors.append({"source": "tracker", "error": "Repeated pagination token"})
+                        failed("tracker")
                     state["tracker"] = next_token
                     if added or state["tracker_done"] or rows:
                         break
                 except RivalsDataError as exc:
                     errors.append({"source": "tracker", "error": str(exc)})
                     state["tracker_done"] = True
+                    failed("tracker")
                     break
     if not successes and errors and not seen:
         raise RivalsDataHTTPError("No provider could return match history: " + str(errors))
@@ -209,7 +249,13 @@ def fetch_history(resource, *, cursor=None, season=None, mode=None, hero=None,
     more = bool(pending) or not (state["rd_done"] and state["rt_done"] and state["tracker_done"])
     next_cursor = PREFIX + base64.urlsafe_b64encode(json.dumps(
         {"scope": scope, "state": state}, separators=(",", ":")).encode()).decode() if more else None
+    checkpoints = {source: {"ids": observed.get(source, []),
+                           "complete": state[token + "_done"] and not record.get("failed"),
+                           "ordered": record["ordered"], "cutoff": record.get("cutoff", False)}
+                   for source, token in (("rivalsdata", "rd"), ("rivalstracker", "rt"), ("tracker", "tracker"))
+                   if (record := progress.get(source)) is not None}
     return MatchHistory({**primary, "matches": emitted, "next_cursor": next_cursor,
                          "has_more": more, "source": "combined",
                          "provider_metadata": {"sources": sources, "errors": errors, "scope": scope,
+                                               "checkpoints": checkpoints,
                                                "ordering": "descending_within_page"}}, client=resource._client)

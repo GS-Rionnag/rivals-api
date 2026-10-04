@@ -17,7 +17,7 @@ implemented feature. Provider APIs are unofficial/undocumented and may change.
 
 - Distribution: `rivals-api`; preferred import: `rivals_api`.
 - Compatibility: `rivalsdata` and `RivalsDataClient` remain aliases.
-- Version: `4.1.0`.
+- Version: `5.0.0`.
 - Python `>=3.10`, Hatchling build, `src/` layout.
 - Runtime HTTP dependency: `curl-cffi`; optional browser fallback: Camoufox.
 - Public entry point: `RivalsClient`.
@@ -129,17 +129,21 @@ season="current", a positive provider season ID, or season="all".
 Current-season detection normalizes Tracker numeric string IDs and falls back
 to the live RivalsTracker global /heroes/stats season; it never substitutes
 all-seasons data or the player's last played season for an unverifiable current season.
-Hero/class stats use match attribution.
-Every match counts once for its longest-played hero. Missing playtime, ties and
-conflicts remain unresolved, with coverage metadata. Provider summaries are
-separately named `summary_heroes`, `summary_classes`, and `heroes.summary`.
-Hero/class MCP tools no longer expose calculation methods; list tools return
-`data` plus metadata. See the integration guide for migration details.
+Overall, hero, and class win-rate functions default to `method="normal"`:
+scoped provider summaries without match history or detail requests. One shared
+summary calculation retains source, count basis, disagreements and missing
+coverage. Overall counts prefer direct career records, then map totals, then
+uncertain rank battles. Hero/class participation can differ from unique matches.
+`method="precise"` traverses available history and verifies completed outcomes;
+hero/class rates use longest-played attribution with unresolved cases reported.
+All applicable MCP tools expose the same method argument.
 
-`player.stats.win_rate()` selects scoped RT/Tracker career records as intact
-counts and checks them against history. RD rank battle records remain ineligible
-diagnostics. Missing summaries fall back to known tracked outcomes. Metadata
-preserves uncertainty and coverage; no percentage averaging or full-coverage
-claim. The MCP overall tool no longer exposes method, cached, hero or teammate.
-The legacy profile win_rate property remains a competitive snapshot; normal
-season requests and matches.fetch_win_rate() use the new canonical calculation.
+`cache.py` persists history and details in SQLite, scoped by UID/season/enrichment
+for history and match/enrichment for details. Each provider independently stops
+newest-page traversal at a cached match only after a completed chronological
+scan. Failed or unordered scans cannot establish new boundaries. Retained tails
+are merged with fresh rows; missing details retry. `cache_dir`,
+`RIVALS_API_CACHE_DIR`, and `persist_cache=False` configure storage. This assumes
+no older-history backfill behind a retained boundary. Calculation caches remain
+short lived. See README and the integration guide for usage.
+The legacy profile win_rate remains a competitive snapshot.

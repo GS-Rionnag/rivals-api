@@ -25,7 +25,7 @@ def _outcome(resource, row, errors):
     from .attribution import completed_outcome
 
     client = resource._client
-    detail = client._match_detail_cache.get((str(row["match_uid"]), bool(client.enrich)))
+    detail = client._cached_match_detail(row["match_uid"])
     if detail:
         outcome, reason = completed_outcome(detail, resource.uid, client._player_names.get(resource.uid))
         if outcome is not None or reason == "conflicting_match_outcome":
@@ -194,6 +194,61 @@ def calculate(resource, *, season=None, mode="all"):
                                "complete_game_history_verified": False}}}
     if (not errors and not result["metadata"]["selection_uncertain"]
             and result["metadata"]["coverage"]["unknown_results"] == 0):
+        client._season_rate_cache[key] = time.monotonic(), deepcopy(result)
+        while len(client._season_rate_cache) > 16:
+            client._season_rate_cache.pop(next(iter(client._season_rate_cache)))
+    return result
+
+
+def calculate_precise(resource, *, season=None, mode="all"):
+    """Count verified completed match outcomes, independently of hero attribution."""
+    from .attribution import completed_outcome
+
+    modes = validate_mode(mode)
+    season = resolve_season(resource, season)
+    client = resource._client
+    key = (resource.uid, season, mode, bool(client.enrich), "precise")
+    cached = client._season_rate_cache.get(key)
+    if cached and time.monotonic() - cached[0] < client.provider_cache_ttl:
+        return deepcopy(cached[1])
+    rows, history_metadata = scoped_history(resource, season, mode)
+    errors = list(history_metadata.get("errors", []))
+    totals = {item: {"games": 0, "wins": 0, "losses": 0} for item in modes}
+    unresolved, sources = [], set(history_metadata.get("sources", []))
+    for identifier, summary in rows.items():
+        try:
+            detail = client._cached_match_detail(identifier)
+            outcome, reason = completed_outcome(detail or {}, resource.uid, client._player_names.get(resource.uid))
+            if outcome is None and reason != "conflicting_match_outcome":
+                detail = client.matches.get(identifier).to_dict()
+                client._store_match_detail(identifier, detail)
+                outcome, reason = completed_outcome(detail, resource.uid, client._player_names.get(resource.uid))
+            errors.extend({"match_uid": identifier, **e} for e in detail.get("provider_metadata", {}).get("errors", []))
+        except RivalsDataError as exc:
+            outcome, reason = None, "details_unavailable"
+            errors.append({"match_uid": identifier, "error": str(exc)})
+        if outcome is None:
+            unresolved.append({"match_uid": identifier, "reason": reason})
+            continue
+        item = next(item for item in modes if MODES[item] == summary["game_mode_id"])
+        totals[item]["games"] += 1
+        totals[item]["wins" if outcome else "losses"] += 1
+        sources.update(detail.get("provider_metadata", {}).get("sources", []))
+    errors.extend({"source": "cache", "error": e} for e in client._history_store.errors
+                  if not any(item.get("source") == "cache" and item.get("error") == e for item in errors))
+    games = sum(row["games"] for row in totals.values())
+    wins = sum(row["wins"] for row in totals.values())
+    rate = round(wins * 100 / games, 2) if games else None
+    result = {"games": games, "matches": games, "wins": wins, "losses": games - wins,
+              "win_rate_pct": rate, "win_rate": round(rate) if rate is not None else None,
+              "metadata": {"method": "precise", "scope": {"uid": resource.uid, "season": season, "mode": mode},
+                           "sources": sorted(sources), "by_mode": totals,
+                           "counts_basis": "deduplicated tracked matches with verified outcomes",
+                           "provider_errors": errors, "unresolved": unresolved,
+                           "cache": history_metadata.get("cache", {}),
+                           "coverage": {"matches_found": len(rows), "matches_resolved": games,
+                                        "unknown_results": len(unresolved), "complete_game_history_verified": False}}}
+    if not errors and not unresolved:
         client._season_rate_cache[key] = time.monotonic(), deepcopy(result)
         while len(client._season_rate_cache) > 16:
             client._season_rate_cache.pop(next(iter(client._season_rate_cache)))

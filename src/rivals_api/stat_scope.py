@@ -6,6 +6,14 @@ from .game_ids import numeric_id
 MODES = {"competitive": 2, "quickplay": 1}
 
 
+def validate_method(method):
+    if method in (None, "normal", "summary", "estimate"):
+        return "normal"
+    if method in ("precise", "exact"):
+        return "precise"
+    raise ValueError("method must be normal or precise (estimate/exact remain aliases)")
+
+
 def validate_mode(mode):
     if mode not in (*MODES, "all"):
         raise ValueError("mode must be competitive, quickplay, or all")
@@ -45,7 +53,7 @@ def scoped_history(resource, season, mode):
     modes = validate_mode(mode)
     history = PlayerMatches(resource._client, resource.uid).fetch(
         limit="all", season=None if season == "all" else season,
-        mode=None if mode == "all" else mode)
+        mode=None if mode == "all" else mode, incremental=True)
     allowed = {MODES[item] for item in modes}
     rows = {str(row.match_uid): row.to_dict() for row in history.matches
             if row.get("match_uid") and row.get("game_mode_id") in allowed}

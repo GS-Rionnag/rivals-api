@@ -78,30 +78,31 @@ def client(monkeypatch):
             outcome=identifier == "win")))
         monkeypatch.setattr(client.providers.tracker, "request", lambda *a, **k: {
             "metadata": {"currentSeason": 20}})
+        monkeypatch.setattr(client, "_post_json", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Unexpected network request")))
         client.calls = calls
         yield client
 
 
 def test_simple_hero_class_api_deduplicates_and_reuses_calculation(client):
     stats = PlayerStats(client, 691218686)
-    heroes = stats.heroes()
+    heroes = stats.heroes(method="precise")
     assert {r.hero_name: (r.games, r.wins, r.losses, r.win_rate) for r in heroes} == {
         "Daredevil": (1, 1, 0, 100), "Angela": (1, 0, 1, 0)}
-    classes = stats.classes()
+    classes = stats.classes(method="precise")
     assert {r.player_class: (r.games, r.wins) for r in classes.classes} == {
         "dps": (1, 1), "tank": (1, 0)}
     assert classes.metadata.coverage.matches_found == 2
     assert classes.metadata.coverage.matches_unresolved == 0
     assert len(client.calls) == 1
     assert client.calls[0]["season"] == 20
-    assert PlayerHeroes(client, 691218686).fetch()[0].hero_name == "Daredevil"
-    stats.heroes(season="all", mode="quickplay")
+    assert PlayerHeroes(client, 691218686).fetch(method="precise")[0].hero_name == "Daredevil"
+    stats.heroes(season="all", mode="quickplay", method="precise")
     assert client.calls[-1]["season"] is None and client.calls[-1]["mode"] == "quickplay"
 
 
 def test_unresolved_coverage_is_available_even_with_empty_hero_list(client, monkeypatch):
     monkeypatch.setattr(client.matches, "get", lambda *a: Match(detail([(1055, 20), (1056, 20)])))
-    result = PlayerStats(client, 691218686).hero_win_rates(season=20)
+    result = PlayerStats(client, 691218686).hero_win_rates(season=20, method="precise")
     assert result.data == []
     assert result.metadata.coverage.matches_found == 2
     assert result.metadata.coverage.matches_unresolved == 2
@@ -113,7 +114,7 @@ def test_detail_outage_does_not_become_summary_attribution(client, monkeypatch):
     def failure(*a):
         raise RivalsDataHTTPError("offline")
     monkeypatch.setattr(client.matches, "get", failure)
-    result = PlayerStats(client, 691218686).hero_win_rates(season=20)
+    result = PlayerStats(client, 691218686).hero_win_rates(season=20, method="precise")
     assert result.data == [] and len(result.metadata.provider_errors) == 2
 
 
@@ -125,24 +126,24 @@ def test_hero_class_season_scope_and_current_fallback(client, monkeypatch):
     monkeypatch.setattr(client.providers.rt, "request", lambda *a, **k: {"season": "20"})
     stats = PlayerStats(client, 691218686)
     for season, expected in [("current", 20), (19, 19), ("all", "all")]:
-        heroes = stats.hero_win_rates(season=season)
-        classes = stats.class_win_rates(season=season)
+        heroes = stats.hero_win_rates(season=season, method="precise")
+        classes = stats.class_win_rates(season=season, method="precise")
         assert heroes.metadata.scope.season == classes.metadata.scope.season == expected
         assert classes.metadata.coverage.matches_attributed == heroes.metadata.coverage.matches_attributed
         assert client.calls[-1]["season"] == (None if expected == "all" else expected)
 
 
-def test_mcp_defaults_and_schemas_have_no_character_method(client, monkeypatch):
+def test_mcp_precise_mode_and_summary_defaults(client, monkeypatch):
     import asyncio
     server = pytest.importorskip("rivalsdata.mcp_server", exc_type=ImportError)
     monkeypatch.setattr(client, "get_player", lambda *a: SimpleNamespace(stats=PlayerStats(client, 691218686)))
     monkeypatch.setattr(server, "_call", lambda fn, *a, **kw: fn(client, *a, **kw))
-    assert len(server.get_player_heroes("GS-4").data) == 2
-    assert server.get_player_stats("GS-4").metadata.scope.season == 20
-    assert server.get_player_stats("GS-4", category="classes", season="all").metadata.scope.season == "all"
+    assert len(server.get_player_heroes("GS-4", method="precise").data) == 2
+    assert server.get_player_stats("GS-4", method="precise").metadata.scope.season == 20
+    assert server.get_player_stats("GS-4", category="classes", season="all", method="precise").metadata.scope.season == "all"
     tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
     for name in ("get_player_heroes", "get_player_hero_win_rates", "get_player_class_win_rates"):
-        assert "method" not in tools[name].inputSchema["properties"]
+        assert tools[name].inputSchema["properties"]["method"]["default"] == "normal"
     assert tools["get_player_stats"].inputSchema["properties"]["mode"]["default"] == "all"
 
 
@@ -187,8 +188,8 @@ def test_valid_cached_source_details_reused_despite_optional_outage(client, monk
 
     monkeypatch.setattr(client.matches, "get", unexpected)
     stats = PlayerStats(client, 691218686)
-    assert stats.hero_win_rates(season=20).data[0].games == 2
-    result = stats.class_win_rates(season=20)
+    assert stats.hero_win_rates(season=20, method="precise").data[0].games == 2
+    result = stats.class_win_rates(season=20, method="precise")
     assert result.data[0].games == 2
     assert len(result.metadata.provider_errors) == 2
 
@@ -206,15 +207,15 @@ def test_all_hero_class_modes_combine_only_competitive_and_quickplay(client, mon
     monkeypatch.setattr(client.matches, "get", lambda identifier: Match(
         detail([(1055, 80)], outcome=identifier == "win")))
     stats = PlayerStats(client, 691218686)
-    hero = stats.heroes()[0]
+    hero = stats.heroes(method="precise")[0]
     assert (hero.games, hero.wins, hero.losses, hero.win_rate_pct) == (2, 1, 1, 50)
     assert hero.all.games == 2 and hero.mode == "all"
-    assert stats.classes().classes[0].all.games == 2
-    assert stats.heroes(mode="competitive")[0].games == 1
-    assert stats.heroes(mode="quickplay")[0].wins == 0
+    assert stats.classes(method="precise").classes[0].all.games == 2
+    assert stats.heroes(mode="competitive", method="precise")[0].games == 1
+    assert stats.heroes(mode="quickplay", method="precise")[0].wins == 0
 
 
 @pytest.mark.parametrize("mode", [None, "custom", "quick-match", 1])
 def test_invalid_canonical_modes_are_rejected(client, mode):
     with pytest.raises(ValueError, match="competitive, quickplay, or all"):
-        PlayerStats(client, 691218686).heroes(mode=mode)
+        PlayerStats(client, 691218686).heroes(mode=mode, method="precise")

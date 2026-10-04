@@ -62,6 +62,8 @@ class RivalsClient:
         use_browser_fallback: bool = False,
         enrich: bool = True,
         provider_cache_ttl: float = 60,
+        cache_dir: str | None = None,
+        persist_cache: bool = True,
     ) -> None:
         self.timeout = timeout
         self.impersonate = impersonate
@@ -72,6 +74,10 @@ class RivalsClient:
         self._player_names: dict[int, str] = {}
         self._attribution_cache: dict[tuple, tuple[float, dict]] = {}
         self._season_rate_cache: dict[tuple, tuple[float, dict]] = {}
+        self._summary_rate_cache: dict[tuple, tuple[float, dict]] = {}
+        from .cache import MatchCache
+
+        self._history_store = MatchCache(cache_dir, persistent=persist_cache)
         self._match_history_cache = _MATCH_HISTORY_CACHE
         self._match_detail_cache = _MATCH_DETAIL_CACHE
         self.provider_errors: list[dict[str, str]] = []
@@ -101,8 +107,21 @@ class RivalsClient:
         """Close the underlying HTTP session."""
         self._attribution_cache.clear()
         self._season_rate_cache.clear()
+        self._summary_rate_cache.clear()
+        self._history_store.close()
         self.session.close()
         self.providers.close()
+
+    def _cached_match_detail(self, identifier):
+        key = (str(identifier), bool(self.enrich))
+        return self._match_detail_cache.get(key) or self._history_store.get("details-v1", key)
+
+    def _store_match_detail(self, identifier, detail):
+        from .match_details import _json_safe
+
+        key = (str(identifier), bool(self.enrich))
+        self._match_detail_cache[key] = detail
+        self._history_store.put("details-v1", key, _json_safe(detail))
 
     def __enter__(self) -> RivalsClient:
         return self

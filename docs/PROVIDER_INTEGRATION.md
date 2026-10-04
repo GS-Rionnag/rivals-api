@@ -87,11 +87,11 @@ unbound matches require `client.matches.get(match.match_uid)` instead.
 | `client.get_player(...)` | RT fallback, section visibility and missing profile fields |
 | `player.matches.fetch(limit=..., ...)` | Combined history; numeric limits stop after that many merged matches and return a resumable cursor; `limit="all"` traverses all pages. Both deduplicate and report source errors. |
 | `client.matches.get(...)` | Per-hero match K/D/A, advanced combat/hero segments and completeness flags |
-| `player.stats.win_rate(...)` / `player.matches.fetch_win_rate()` | Intact season career counts selected per mode and checked against combined history; explicit partial fallback |
-| `player.stats.hero_win_rates(...)` | Canonical longest-played-hero results with coverage and automatic caching |
-| `player.stats.class_win_rates(...)` | Canonical class results from the same match assignments |
+| `player.stats.win_rate(...)` / `player.matches.fetch_win_rate()` | Scoped summaries by default; precise completed match outcomes with coverage |
+| `player.stats.hero_win_rates(...)` | Summary hero results by default; precise longest-played attribution with coverage and automatic caching |
+| `player.stats.class_win_rates(...)` | Selected hero/role summaries by default; precise class assignments |
 | `player.stats.heroes(...)` | Hero list with direct counts and selected-mode nested counts |
-| `player.stats.classes(...)` | Class list grouped from one hero assignment per match |
+| `player.stats.classes(...)` | Class list using the same normal/precise method |
 | `player.stats.summary_heroes(...)` / `summary_classes(...)` | Provider participation summaries and available career combat/playtime fields |
 | `player.teammates.fetch(...)` | Last encounter and encounter/season metadata from Tracker |
 | `player.name_history.fetch()` | First/last detection, usage counts and current-name metadata |
@@ -143,33 +143,28 @@ one queue. The same mode options/default apply to hero/class methods and MCP
 tools. `"all"` excludes Custom/Arcade; provider `mode=all` overviews and RT
 `total_matches` can include other queues and are not used for this calculation.
 
-Records keep games/wins/losses together per source and mode. RT ranked/unranked
-career counters and Tracker scoped overview segments are compared after scope,
-identity and integer-count validation. RD rank battle counters are retained as
-ineligible observations because the count basis is not established as career
-matches. Counts below known history totals/wins/losses are rejected. Source
-agreement, exact history-count agreement, and credible record update times
-when available support selection. Unresolved ties keep an intact deterministic
-record with explicit uncertainty/conflicts; rates are never averaged.
+All three functions accept `method="normal"` (default) and `method="precise"`.
+Normal mode requests only scoped summaries and shares one calculation across
+all three functions. It prefers public direct career overviews for overall
+counts, then map totals, then explicitly uncertain rank-system battles. Hero
+and class datasets retain their provider's counting basis, including fractional
+participation. Counts are validated as finite, nonnegative, and wins <= games.
+Comparable agreement and verified update times can resolve competing records;
+otherwise deterministic selection retains explicit uncertainty and alternatives.
+Provider percentages are never averaged. Combined modes sum counts before
+calculating the percentage. Missing overall modes produce null overall counts;
+zero games produce a null rate. Lifetime Tracker summaries enumerate the
+verified season catalog rather than assuming a default-season response is lifetime.
 
-The rate is selected wins / games * 100. For `"all"`, selected counts from the
-two disjoint modes are summed before division. Missing career records fall back
-to deduplicated known history outcomes and are labeled partial. Completed detail
-can resolve disputed or missing summary outcomes independently of hero playtime.
-Unknown outcomes never become losses in the fallback denominator. Zero games
-returns a null percentage. `season="all"` uses tracked-history fallback rather
-than mistaking a default-season career record for lifetime counts.
-
-Metadata carries selected sources, scoped per-mode records, rejected/alternate
-observations, disagreements, history counts, unknown outcomes, and errors.
-History agreement supports the record without claiming complete game coverage.
-Caching is automatic and scoped by player, season, mode and enrichment setting.
-Unresolved disagreements, unknown outcomes and request failures are retried.
+Precise mode traverses all available tracked history and fetches completed details.
+Overall outcomes are resolved independently of hero playtime; unknown outcomes
+are excluded and reported. Neither mode claims complete game-history coverage.
+See [README](../README.md) for usage and persistent cache configuration.
 
 ### Canonical hero/class win rates
 
-`player.stats.heroes()` and `player.heroes.fetch()` list match-attributed heroes.
-`player.stats.classes()` groups those same assignments by class.
+`player.stats.heroes()` and `player.heroes.fetch()` list provider summary heroes by default.
+`player.stats.classes()` groups the selected summaries by class.
 `hero_win_rates()` / `class_win_rates()` return `data` plus `metadata`, retaining
 coverage even when no rows can be attributed. Mode defaults to Competitive plus Quickplay (`"all"`);
 season defaults to Tracker profile `currentSeason`, with RivalsTracker's global
@@ -183,7 +178,7 @@ the current global season. This resolution also applies to overall rates.
 All-seasons history sends
 no season selector, rather than the provider-summary `-1` selector.
 
-Each deduplicated match is assigned once to the unique hero with the most
+With `method="precise"`, each deduplicated match is assigned once to the unique hero with the most
 per-match playtime. The result goes to that hero and its class. Complete source
 records are evaluated independently; their durations are never blended.
 Equal maximum times, invalid/missing durations, duplicate heroes, uncertain
@@ -200,7 +195,11 @@ Complete game-history coverage is never claimed. Assigned `play_time` covers
 the chosen hero only in the matches attributed to it, not all hero participation.
 Exact-season queries retain the history fetcher's explicit season limitations.
 
-Detail caches are reused automatically. Hero and class calculations share a
+History and completed details persist in SQLite across client restarts. Newest
+pages are refreshed per provider until a cached match from a completed,
+chronological traversal is encountered; the retained tail supplies older matches.
+Incomplete or unordered traversals cannot establish stopping boundaries. This
+assumes no older-history backfill behind the boundary. Detail caches are reused automatically. Hero and class calculations share a
 bounded per-client cache using `provider_cache_ttl`; errors/unresolved matches
 prevent caching a final calculation so another request can retry them.
 First calls can require one combined detail lookup per match.
@@ -212,13 +211,14 @@ Former provider hero/class definitions remain under `summary_heroes(mode=...)`,
 selected-mode nested stats plus direct counts, but cannot supply career combat
 totals or leaderboard ranks (`rank=None`). Class responses retain `.classes`.
 MCP hero-list/stat tools now return a `data`/`metadata` envelope and default to
-Competitive plus Quickplay. Overall and hero/class MCP tools no longer expose `method`.
+Competitive plus Quickplay. Overall and hero/class MCP tools accept `method="normal"` or `"precise"`.
 
 Python `matches.fetch_hero_win_rates()` / `fetch_class_win_rates()` default to
-canonical attribution; explicit `exact` is an alias. Explicit legacy `estimate` with a single mode
-keeps provider summary estimates, while `cached` uses existing history/details
-without requests and reports unresolved attribution. Overall `matches.fetch_win_rate()` aliases `stats.win_rate()`. Explicit legacy
-Python method overrides remain available for specialized history calculations.
+normal summaries; `exact` aliases precise and `estimate` aliases normal.
+`cached` retains the request-free history calculation. Overall
+`matches.fetch_win_rate()` defaults to the same normal summary calculation and
+accepts `precise`; legacy explicit `exact` preserves its history-summary behavior.
+
 The profile `player.win_rate` convenience remains a competitive profile snapshot,
 not the new verified season request.
 
@@ -246,7 +246,7 @@ python -m camoufox fetch
 
 The reference catalog is a 2026-10-01 snapshot of 56 public hero entries. It is explicitly dated; abilities/season windows can change. Live Custom combat stats, authenticated crosshair edits/votes, LFG posting, Rank Me, custom account leaderboards, OBS/desktop video/hero-swap products and private-data access are not implemented as if they were public statistics endpoints.
 
-53 automated tests pass. Tests use captured public responses and cover mode/schema compatibility, fallbacks, identity-based merging, conflicts, damage/time semantics, pagination/deduplication, filter-bound cursors, all-season isolation, caching, rate limits/privacy and packaged reference data. Live smoke checks confirmed GS-4's three S10 Custom matches, a 12-player match with hero detail, GS-'s enriched hero stats, 24 teammate and 16 opponent encounters, and 77 rank-history matches at test time. Counts can change.
+The automated suite covers these behaviors. Tests use captured public responses and cover mode/schema compatibility, fallbacks, identity-based merging, conflicts, damage/time semantics, pagination/deduplication, filter-bound cursors, all-season isolation, caching, rate limits/privacy and packaged reference data. Live smoke checks confirmed GS-4's three S10 Custom matches, a 12-player match with hero detail, GS-'s enriched hero stats, 24 teammate and 16 opponent encounters, and 77 rank-history matches at test time. Counts can change.
 
 ## Automatic best-data selection
 

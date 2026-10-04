@@ -148,11 +148,12 @@ def calculate(resource, *, season=None, mode="all"):
     sources = set(history_metadata.get("sources", []))
     for identifier, summary in rows.items():
         try:
-            detail = client._match_detail_cache.get((identifier, bool(client.enrich)))
+            detail = client._cached_match_detail(identifier)
             assignment, reason = attribute_match(
                 detail or {}, uid, client._player_names.get(uid), summary)
             if assignment is None:
                 detail = client.matches.get(identifier).to_dict()
+                client._store_match_detail(identifier, detail)
                 assignment, reason = attribute_match(
                     detail, uid, client._player_names.get(uid), summary)
             errors.extend({"match_uid": identifier, **e} for e in detail.get(
@@ -191,7 +192,8 @@ def calculate(resource, *, season=None, mode="all"):
     metadata = {"scope": {"uid": uid, "season": season, "mode": mode},
                 "attribution_rule": "unique hero with maximum per-match play_time",
                 "counts_basis": "deduplicated tracked matches with verified attribution",
-                "sources": sorted(sources), "provider_errors": errors,
+                "method": "precise", "sources": sorted(sources), "provider_errors": errors,
+                "cache": history_metadata.get("cache", {}),
                 "coverage": {"matches_found": len(rows), "matches_attributed": len(assignments),
                              "matches_class_attributed": sum(r["games"] for r in classes.values()),
                              "matches_unresolved": len(unresolved),

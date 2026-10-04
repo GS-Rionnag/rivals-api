@@ -30,8 +30,7 @@ def fetch_match(client: Any, match_id: str | int, *, refresh: bool = False) -> M
         raise ValueError("match_id must be a nonempty match identifier")
     identifier = str(match_id)
     enrich = bool(getattr(client, "enrich", False))
-    key = (identifier, enrich)
-    cached = client._match_detail_cache.get(key)
+    cached = client._cached_match_detail(identifier)
     cached_metadata = cached.get("provider_metadata", {}) if cached else {}
     if (cached is not None and not refresh and not cached_metadata.get("errors")
             and not cached_metadata.get("unmatched_players")
@@ -90,7 +89,7 @@ def fetch_match(client: Any, match_id: str | int, *, refresh: bool = False) -> M
     }
     # Retain partial evidence for request-free calculations, while the cache
     # read above retries it for get_details() instead of freezing an outage.
-    client._match_detail_cache[key] = deepcopy(result)
+    client._store_match_detail(identifier, deepcopy(result))
     while len(client._match_detail_cache) > 500:
         client._match_detail_cache.pop(next(iter(client._match_detail_cache)))
     return Match(result, client=client)

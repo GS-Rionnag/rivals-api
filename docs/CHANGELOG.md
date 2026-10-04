@@ -1,5 +1,40 @@
 # Changelog
 
+## 5.0.0 — 2026-10-04
+
+Overall, hero, and class win-rate functions now default to provider summaries
+without requesting match history. This changes the default counting semantics;
+summary participation counts can differ from match-based attribution.
+
+### Migration
+
+- Pass `method="precise"` to `player.stats.win_rate()`, `hero_win_rates()`,
+  `class_win_rates()`, `heroes()`, or `classes()` for match-based calculations.
+  Precise overall rates verify completed match outcomes; hero/class rates use
+  longest-played-hero attribution with explicit unresolved coverage.
+- Applicable MCP tools accept `method="normal"` (default) or `"precise"`.
+  Season and mode selectors and existing response envelopes are retained.
+- Legacy hero/class `exact` aliases precise; `estimate` aliases normal summaries.
+  Explicit legacy overall `matches.fetch_win_rate(method="exact")` retains
+  history-summary behavior; use `precise` for completed-outcome verification.
+
+### Changes
+
+- Share scoped summary calculations across the three win-rate functions. Keep
+  provider counts intact, never average percentages, and expose selection,
+  disagreements, private snapshots, missing coverage, and count bases.
+- Persist collected history and match details in SQLite across client restarts.
+  Refresh each provider's newest pages until a cached match from a completed,
+  chronological traversal is found, then reuse its retained history tail.
+  Interrupted or unordered scans do not establish stopping boundaries.
+- Configure storage with `cache_dir`, `RIVALS_API_CACHE_DIR`, or
+  `persist_cache=False`. Calculation caches remain short lived; incomplete
+  details are retried. Incremental reuse assumes no older-history backfill
+  behind a cached boundary. Neither method guarantees full game-history coverage.
+- Add regression coverage for summary-only requests, fractional counts,
+  missing modes, provider disagreements, restart reuse, pagination boundaries,
+  interrupted scans, and storage failures.
+
 ## 4.1.0 — 2026-10-03
 
 - Current-season statistics now fall back to RivalsTracker's global hero-stat
