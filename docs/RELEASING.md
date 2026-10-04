@@ -22,8 +22,10 @@ Before selecting a major bump, look for a compatible implementation: add an
 optional argument or separately named method, retain an alias, or deprecate the
 old behavior with a documented migration. Split independent work into focused
 releases where practical. If the requested behavior still requires a breaking
-change, explain the concrete incompatibility and use a major bump; do not label
-a breaking release as a patch or minor just to keep the number small.
+change, explain the concrete incompatibility and obtain explicit user
+authorization before implementing the breaking change or publishing a major
+release. A general "push and release" request does not authorize a major bump.
+Do not label a breaking release as a patch or minor just to keep the number small.
 
 ## Publishing
 

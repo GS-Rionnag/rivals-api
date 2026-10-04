@@ -167,6 +167,19 @@ This assumes providers do not backfill older history behind the cached boundary;
 available tracked history still cannot guarantee complete game history.
 
 Short-lived calculation caches use `provider_cache_ttl` (60 seconds by default).
+Fully failed normal calculations are reused for five seconds across the three
+win-rate functions. After a provider returns HTTP 429, remaining summary requests
+to that provider are skipped for the calculation; other providers still run.
+HTTP and browser API requests share a process-wide guard per provider, including
+across client instances and client restarts within that process. Requests are
+serialized and spaced one second apart by default. HTTP 429 establishes a
+cooldown using `Retry-After` (seconds or HTTP date), or 30 seconds with exponential
+backoff up to five minutes when the header is absent. Requests during cooldown
+fail locally without hitting the provider; valid cached responses remain usable.
+The error exposes `status_code=429` and `retry_after` seconds. Browser fallback
+does not bypass cooldowns. Configure `request_interval` and `rate_limit_cooldown`
+on `RivalsClient`; the guard is not shared between separate processes or hosts.
+Provider limits can still be exceeded by other traffic or stricter limits.
 Pass `RivalsClient(cache_dir="path/to/cache")` to choose the persistent location,
 or set `RIVALS_API_CACHE_DIR`. The default is the user's local application cache.
 `persist_cache=False` keeps evidence only in memory for that client. To rebuild

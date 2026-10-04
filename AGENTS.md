@@ -18,7 +18,13 @@ briefly states its choice and reason. Do not ask the user to choose the number.
 - Patch (the user's "0.01"): compatible fixes; `4.0.0` becomes `4.0.1`.
 - Minor (the user's "0.1"): compatible new features; `4.0.0` becomes `4.1.0`.
 - Major (the user's "1"): necessary public API incompatibility; `4.0.0` becomes
-  `5.0.0`. First try to preserve compatibility and stage the migration.
+  `5.0.0`. Requires explicit user authorization for a major/breaking release.
+
+Preserve compatibility so ordinary requests stay patch or minor. A general
+"push and release" request does not authorize a major bump. If compatibility
+cannot be preserved, explain the concrete conflict and obtain explicit
+authorization before implementing the breaking change or publishing a major.
+Do not label an incompatible release as patch/minor to avoid this requirement.
 
 A push alone does not require a release or version bump. Documentation-only
 changes normally need neither. Do not rewrite published versions or release tags.

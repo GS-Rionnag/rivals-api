@@ -175,6 +175,8 @@ def test_transport_privacy_rate_limit_cache_and_write_guard(client, monkeypatch)
     monkeypatch.setattr(transport.session, "get", lambda *a, **k: limited)
     with pytest.raises(RivalsDataHTTPError, match="rate limited"):
         transport.request("/player/1")
+    # Resume the cache checks only once this provider's cooldown expires.
+    transport._rate_gate.blocked_until = 0
     with pytest.raises(ValueError, match="read-only"):
         transport.request("/update-player/1", payload={})
     calls = []

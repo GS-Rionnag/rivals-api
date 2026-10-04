@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.1.0 — 2026-10-04
+
+- Pace HTTP/browser API requests per provider across clients in the same process.
+  Honor HTTP 429 `Retry-After` seconds/date headers, otherwise back off from
+  30 seconds up to five minutes. Cooldown requests fail locally with
+  `status_code` and `retry_after`; cached provider responses remain usable.
+  Add optional `request_interval` and `rate_limit_cooldown` client settings.
+- Prevent normal overall/hero/class lookups from repeating fully failed
+  calculations within five seconds or continuing calls to a rate-limited source
+  in the same calculation. Other providers still supply available summaries.
+
 ## 5.0.0 — 2026-10-04
 
 Overall, hero, and class win-rate functions now default to provider summaries

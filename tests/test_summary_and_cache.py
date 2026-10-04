@@ -244,3 +244,45 @@ def test_cache_storage_failure_keeps_memory_evidence(tmp_path):
     assert store.get('details', 'a') == {'value': 1}
     assert store.errors
     store.close()
+
+
+def test_failed_normal_lookup_does_not_repeat_rate_limited_requests(monkeypatch):
+    calls = []
+    clock = [100.0]
+    monkeypatch.setattr('rivals_api.summary_rates.time.monotonic', lambda: clock[0])
+    with RivalsClient(enrich=False) as client:
+        stats = PlayerStats(client, 123)
+
+        def limited(path, **kwargs):
+            calls.append(path)
+            raise RivalsDataHTTPError('RivalsData rate limited the request (HTTP 429)')
+
+        monkeypatch.setattr(stats, '_post', limited)
+        for name in ('win_rate', 'hero_win_rates', 'class_win_rates'):
+            with pytest.raises(RivalsDataHTTPError, match='429'):
+                getattr(stats, name)(season=20)
+        assert calls == ['/player/stats/heroes']
+        clock[0] += 6
+        with pytest.raises(RivalsDataHTTPError, match='429'):
+            stats.win_rate(season=20)
+        assert len(calls) == 2
+
+
+def test_rate_limited_primary_does_not_block_other_summary_sources(monkeypatch):
+    with RivalsClient() as client:
+        stats, calls = PlayerStats(client, 123), []
+
+        def limited(path, **kwargs):
+            calls.append(path)
+            raise RivalsDataHTTPError('HTTP 429')
+
+        monkeypatch.setattr(stats, '_post', limited)
+        monkeypatch.setattr(client, '_tracker_path', lambda uid: '/profile/test')
+        monkeypatch.setattr(client.providers.tracker, 'request', lambda *a, **k: [])
+        monkeypatch.setattr(client.providers.rt, 'request', lambda *a, **k: {
+            'player': {'_id': 123}, 'stats': {
+                'ranked_matches': 10, 'ranked_matches_wins': 6,
+                'unranked_matches': 5, 'unranked_matches_wins': 3}})
+        result = stats.win_rate(season=20)
+        assert result.win_rate_pct == 60
+        assert calls == ['/player/stats/heroes']

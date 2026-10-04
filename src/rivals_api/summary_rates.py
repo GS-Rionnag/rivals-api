@@ -73,6 +73,9 @@ def calculate(resource, *, season=None, mode="all"):
     season = resolve_season(resource, season)
     client, uid = resource._client, resource.uid
     key = (uid, season, mode, bool(client.enrich))
+    failure = client._summary_rate_errors.get(key)
+    if failure and time.monotonic() - failure[0] < 5:
+        raise RivalsDataHTTPError(failure[1])
     cached = client._summary_rate_cache.get(key)
     if cached:
         ttl = min(client.provider_cache_ttl, 5) if cached[1]["metadata"]["provider_errors"] else client.provider_cache_ttl
@@ -80,12 +83,17 @@ def calculate(resource, *, season=None, mode="all"):
             return deepcopy(cached[1])
     errors, excluded = [], []
     candidates = {m: {"overall": [], "heroes": [], "classes": []} for m in modes}
+    limited_sources = set()
 
     def request(source, fn):
+        if source in limited_sources:
+            return None
         try:
             return fn()
         except (RivalsDataError, ValueError, TypeError, AttributeError) as exc:
             errors.append({"source": source, "error": str(exc)})
+            if isinstance(exc, RivalsDataError) and ("429" in str(exc) or "rate limit" in str(exc).lower()):
+                limited_sources.add(source)
             return None
 
     def observation(source, basis, *, private=False, updated=None, grade=0, **values):
@@ -314,7 +322,12 @@ def calculate(resource, *, season=None, mode="all"):
               "classes": sorted([rates(r) for r in class_groups.values()], key=lambda r: (-r["games"], r["player_class"])),
               "metadata": metadata}
     if not any(candidates[m][kind] for m in modes for kind in candidates[m]):
-        raise RivalsDataHTTPError("No provider returned usable scoped summaries: " + str(errors))
+        message = "No provider returned usable scoped summaries: " + str(errors)
+        client._summary_rate_errors[key] = time.monotonic(), message
+        while len(client._summary_rate_errors) > 32:
+            client._summary_rate_errors.pop(next(iter(client._summary_rate_errors)))
+        raise RivalsDataHTTPError(message)
+    client._summary_rate_errors.pop(key, None)
     client._summary_rate_cache[key] = time.monotonic(), deepcopy(result)
     while len(client._summary_rate_cache) > 32:
         client._summary_rate_cache.pop(next(iter(client._summary_rate_cache)))

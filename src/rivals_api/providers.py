@@ -17,6 +17,9 @@ class ProviderTransport:
     """Independent origin/session, bounded cache, and optional Camoufox fallback."""
 
     def __init__(self, name: str, api: str, origin: str, owner: Any) -> None:
+        from .rate_limits import gate
+
+        self._rate_gate = gate(api)
         self.name, self.api, self.origin, self.owner = name, api, origin, owner
         self.session = requests.Session(impersonate=owner.impersonate)
         self.session.headers.update({"Accept": "application/json",
@@ -44,11 +47,11 @@ class ProviderTransport:
             return deepcopy(cached[1])
         try:
             if payload is None:
-                response = self.session.get(self.api + path, params=params,
-                                            timeout=self.owner.timeout)
+                request = lambda: self.session.get(self.api + path, params=params, timeout=self.owner.timeout)
             else:
-                response = self.session.post(self.api + path, json=payload,
-                                             timeout=self.owner.timeout)
+                request = lambda: self.session.post(self.api + path, json=payload, timeout=self.owner.timeout)
+            response = self._rate_gate.run(request, interval=self.owner.request_interval,
+                                           cooldown=self.owner.rate_limit_cooldown)
         except requests.exceptions.RequestException as exc:
             raise RivalsDataHTTPError(f"{self.name} request failed: {exc}") from exc
         body, status = response.text, response.status_code
@@ -59,7 +62,9 @@ class ProviderTransport:
         if status in (403, 503) or "cf-chl-" in body or "Just a moment" in body:
             if not self.owner.use_browser_fallback:
                 raise CloudflareError(f"{self.name} requires use_browser_fallback=True")
-            status, body = self._browser(path, params, payload)
+            status, body = self._rate_gate.run(lambda: self._browser(path, params, payload),
+                                               interval=self.owner.request_interval,
+                                               cooldown=self.owner.rate_limit_cooldown)
         if not 200 <= status < 300:
             raise RivalsDataHTTPError(f"{self.name} HTTP {status} for {path}: {body[:200]}")
         try:
@@ -75,7 +80,7 @@ class ProviderTransport:
         self._cache[key] = time.monotonic(), deepcopy(result)
         return result
 
-    def _browser(self, path: str, params: dict, payload: dict | None) -> tuple[int, str]:
+    def _browser(self, path: str, params: dict, payload: dict | None) -> tuple[int, str] | dict:
         try:
             from camoufox.sync_api import Camoufox
 
@@ -95,10 +100,14 @@ class ProviderTransport:
                       signal: controller.signal, method: payload ? 'POST' : 'GET',
                       ...(payload ? {headers: {'Content-Type':'application/json'},
                         body: JSON.stringify(payload)} : {})});
-                    return {status:r.status, text:await r.text()};
+                    return {status:r.status, text:await r.text(), headers: {
+                      'Retry-After': r.headers.get('Retry-After')}};
                   } finally {clearTimeout(timer);}
                 }""", {"url": url, "payload": payload,
                          "timeout": int(self.owner.timeout * 1000)})
+            if result["status"] == 429:
+                # Pass browser headers to the same gate used for HTTP requests.
+                return result
             return result["status"], result["text"]
         except ImportError as exc:
             raise CloudflareError("Install rivals-api[browser] and fetch Camoufox") from exc

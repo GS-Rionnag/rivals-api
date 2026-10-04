@@ -64,7 +64,14 @@ class RivalsClient:
         provider_cache_ttl: float = 60,
         cache_dir: str | None = None,
         persist_cache: bool = True,
+        request_interval: float = 1,
+        rate_limit_cooldown: float = 30,
     ) -> None:
+        from .rate_limits import gate, setting
+
+        self.request_interval = setting(request_interval, "request_interval")
+        self.rate_limit_cooldown = setting(rate_limit_cooldown, "rate_limit_cooldown")
+        self._rate_gate = gate(self.api_url)
         self.timeout = timeout
         self.impersonate = impersonate
         self.use_browser_fallback = use_browser_fallback
@@ -75,6 +82,7 @@ class RivalsClient:
         self._attribution_cache: dict[tuple, tuple[float, dict]] = {}
         self._season_rate_cache: dict[tuple, tuple[float, dict]] = {}
         self._summary_rate_cache: dict[tuple, tuple[float, dict]] = {}
+        self._summary_rate_errors: dict[tuple, tuple[float, str]] = {}
         from .cache import MatchCache
 
         self._history_store = MatchCache(cache_dir, persistent=persist_cache)
@@ -108,6 +116,7 @@ class RivalsClient:
         self._attribution_cache.clear()
         self._season_rate_cache.clear()
         self._summary_rate_cache.clear()
+        self._summary_rate_errors.clear()
         self._history_store.close()
         self.session.close()
         self.providers.close()
@@ -136,7 +145,9 @@ class RivalsClient:
         url = f"{self.api_url}{path}"
         for attempt in range(3):
             try:
-                response = method(url, timeout=self.timeout, **kwargs)
+                response = self._rate_gate.run(
+                    lambda: method(url, timeout=self.timeout, **kwargs),
+                    interval=self.request_interval, cooldown=self.rate_limit_cooldown)
             except requests.exceptions.RequestException as exc:
                 raise RivalsDataHTTPError(f"RivalsData request failed for {path}: {exc}") from exc
             if response.status_code not in (502, 504) or attempt == 2:
@@ -327,6 +338,11 @@ class RivalsClient:
                 f"RivalsData API returned invalid JSON for {path}"
             ) from exc
 
+    def _paced_browser_evaluate(self, page, script, arguments):
+        return self._rate_gate.run(lambda: page.evaluate(script, arguments),
+                                   interval=self.request_interval,
+                                   cooldown=self.rate_limit_cooldown)
+
     def _camoufox_get_json(self, path: str, params: dict[str, Any]) -> Any:
         try:
             from camoufox.sync_api import Camoufox
@@ -345,13 +361,16 @@ class RivalsClient:
                     wait_until="domcontentloaded",
                     timeout=int(self.timeout * 1000),
                 )
-                response = page.evaluate(
+                response = self._paced_browser_evaluate(page,
                     """async ({url}) => {
                       const response = await fetch(url, {method: "GET"});
-                      return {status: response.status, text: await response.text()};
+                      return {status: response.status, text: await response.text(),
+                        headers: {'Retry-After': response.headers.get('Retry-After')}};
                     }""",
                     {"url": url},
                 )
+        except RivalsDataHTTPError:
+            raise
         except Exception as exc:
             raise CloudflareError(f"Camoufox request failed: {exc}") from exc
         if response["status"] in (403, 429, 503) or "cf-chl-" in response["text"]:
@@ -418,7 +437,7 @@ class RivalsClient:
                     wait_until="domcontentloaded",
                     timeout=int(self.timeout * 1000),
                 )
-                response = page.evaluate(
+                response = self._paced_browser_evaluate(page,
                     """async ({url, payload}) => {
                       const response = await fetch(url, {
                         method: "POST",
@@ -427,11 +446,14 @@ class RivalsClient:
                       });
                       return {
                         status: response.status,
-                        text: await response.text()
+                        text: await response.text(),
+                        headers: {'Retry-After': response.headers.get('Retry-After')}
                       };
                     }""",
                     {"url": f"{self.api_url}{path}", "payload": payload},
                 )
+        except RivalsDataHTTPError:
+            raise
         except Exception as exc:
             raise CloudflareError(f"Camoufox request failed: {exc}") from exc
         if (
