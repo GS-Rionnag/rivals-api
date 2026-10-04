@@ -6,7 +6,7 @@ import math
 import time
 from copy import deepcopy
 
-from .exceptions import RivalsDataError, RivalsDataHTTPError
+from .exceptions import PrivacyError, RivalsDataError, RivalsDataHTTPError
 from .hero_ids import hero_class, hero_name
 from .selection import update_time
 from .stat_scope import resolve_season, validate_mode
@@ -44,7 +44,9 @@ def _select(candidates):
     """Prefer available intact records, comparable agreement, then verified age."""
     if not candidates:
         return None, {"reason": "summary_unavailable", "uncertain": True, "observations": []}
-    pool = [r for r in candidates if not r.get("private_snapshot")] or candidates
+    pool = ([r for r in candidates if not r.get("private_snapshot") and not r.get("stale_snapshot")]
+            or [r for r in candidates if not r.get("stale_snapshot")]
+            or [r for r in candidates if not r.get("private_snapshot")] or candidates)
     # Direct overview counts outrank derived/fallback counts when accessible.
     best_grade = min(r.get("grade", 0) for r in pool)
     pool = [r for r in pool if r.get("grade", 0) == best_grade]
@@ -63,7 +65,7 @@ def _select(candidates):
     selected = pool[0]
     disagreement = any(_fingerprint(r) != _fingerprint(selected) for r in candidates)
     return selected, {"reason": reason,
-                      "uncertain": disagreement or bool(selected.get("private_snapshot"))
+                      "uncertain": disagreement or bool(selected.get("private_snapshot")) or bool(selected.get("stale_snapshot"))
                           or bool(selected.get("missing_seasons")) or best_grade >= 2,
                       "observations": deepcopy(candidates)}
 
@@ -81,7 +83,7 @@ def calculate(resource, *, season=None, mode="all"):
         ttl = min(client.provider_cache_ttl, 5) if cached[1]["metadata"]["provider_errors"] else client.provider_cache_ttl
         if time.monotonic() - cached[0] < ttl:
             return deepcopy(cached[1])
-    errors, excluded = [], []
+    errors, excluded, privacy = [], [], {}
     candidates = {m: {"overall": [], "heroes": [], "classes": []} for m in modes}
     limited_sources = set()
 
@@ -89,15 +91,21 @@ def calculate(resource, *, season=None, mode="all"):
         if source in limited_sources:
             return None
         try:
-            return fn()
+            previous_errors = len(client.provider_errors)
+            value = fn()
+            errors.extend(client.provider_errors[previous_errors:])
+            return value
         except (RivalsDataError, ValueError, TypeError, AttributeError) as exc:
             errors.append({"source": source, "error": str(exc)})
+            if isinstance(exc, PrivacyError):
+                privacy.setdefault(source, {})["section_private"] = True
             if isinstance(exc, RivalsDataError) and ("429" in str(exc) or "rate limit" in str(exc).lower()):
                 limited_sources.add(source)
             return None
 
     def observation(source, basis, *, private=False, updated=None, grade=0, **values):
         return {"source": source, "counts_basis": basis, "private_snapshot": private,
+                "stale_snapshot": any(e.get("source") == source and e.get("stale") for e in errors),
                 "updated_at": updated, "grade": grade, **values}
 
     def hero_rows(rows, source):
@@ -153,6 +161,7 @@ def calculate(resource, *, season=None, mode="all"):
             rt = request("rivalstracker", lambda: client.providers.rt.request(f"/player/{uid}", params={"season": season}))
             if isinstance(rt, dict) and str(mapping(rt.get("player")).get("_id")) == str(uid):
                 private = mapping(rt.get("visibility")).get("career_stats") is False
+                privacy.setdefault("rivalstracker", {})["career_stats_private"] = private
                 for item in modes:
                     prefix, hero_key = ("ranked", "heroes_ranked") if item == "competitive" else ("unranked", "heroes_unranked")
                     stats = mapping(rt.get("stats"))
@@ -171,6 +180,9 @@ def calculate(resource, *, season=None, mode="all"):
         tracker_profile = request("tracker", lambda: client.providers.tracker.request(path)) if path else None
         meta = mapping(mapping(tracker_profile).get("metadata"))
         private = meta.get("isPrivateCareerStatistics") is True
+        privacy["tracker"] = {**privacy.get("tracker", {}), "career_stats_private": private,
+                              "career_overview_private": meta.get("isPrivateCareerOverview") is True,
+                              "match_history_private": meta.get("isPrivateBattleHistory") is True}
         seasons = [season]
         if season == "all":
             catalog = meta.get("seasons")
@@ -315,6 +327,11 @@ def calculate(resource, *, season=None, mode="all"):
                                    "included_modes": available_modes}
                                   if missing_modes and available_modes else None)
     metadata = {"method": "normal", "scope": {"uid": uid, "season": season, "mode": mode},
+                "private_profile": any(any(flags.values()) for flags in privacy.values()),
+                "privacy": privacy,
+                "stale_data": any(e.get("stale") for e in errors),
+                "privacy_warning": "Profile reports private sections; returned stats may be stale or inaccurate."
+                    if any(any(flags.values()) for flags in privacy.values()) else None,
                 "counts_basis": "selected provider summaries; hero/class participation may differ from unique matches",
                 "sources": sorted(selected_sources), "included_modes": list(modes), "by_mode": by_mode,
                 "selections": selections, "provider_errors": errors, "excluded": excluded,

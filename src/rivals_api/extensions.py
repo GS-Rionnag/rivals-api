@@ -80,7 +80,12 @@ class PlayerAnalytics:
         body = self.client.providers.tracker.request(self.client._tracker_path(self.uid))
         meta = body.get("metadata") if isinstance(body, Mapping) else None
         meta = meta if isinstance(meta, Mapping) else {}
-        return response({k: meta.get(k) for k in ("seasons", "currentSeason", "defaultSeason")},
+        values = {k: meta.get(k) for k in ("seasons", "currentSeason", "defaultSeason")}
+        fallback = body.get("provider_metadata", {}).get("fallback") if isinstance(body, Mapping) else None
+        if fallback:
+            values["currentSeason"] = None  # A stale profile cannot prove today's global season.
+            values["provider_metadata"] = {"fallback": fallback}
+        return response(values,
                         "tracker")
 
 

@@ -34,6 +34,8 @@ def resolve_season(resource, season):
             errors.append(f"Tracker: {exc}")
         try:
             body = resource._client.providers.rt.request("/heroes/stats")
+            if isinstance(body, dict) and body.get("provider_metadata", {}).get("fallback", {}).get("stale"):
+                body = None
             current = numeric_id(body.get("season")) if isinstance(body, dict) else None
             if current is not None and current > 0:
                 return current

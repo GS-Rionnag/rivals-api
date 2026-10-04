@@ -66,11 +66,13 @@ class RivalsClient:
         persist_cache: bool = True,
         request_interval: float = 1,
         rate_limit_cooldown: float = 30,
+        stale_cache_ttl: float = 86400,
     ) -> None:
         from .rate_limits import gate, setting
 
         self.request_interval = setting(request_interval, "request_interval")
         self.rate_limit_cooldown = setting(rate_limit_cooldown, "rate_limit_cooldown")
+        self.stale_cache_ttl = setting(stale_cache_ttl, "stale_cache_ttl")
         self._rate_gate = gate(self.api_url)
         self.timeout = timeout
         self.impersonate = impersonate
@@ -194,9 +196,18 @@ class RivalsClient:
         """Return all provider search candidates, deduplicated by game UID."""
         if not name.strip():
             raise ValueError("name must not be empty")
-        results = self.providers.rt.request("/find-player", payload={"name": name.strip()})
+        try:
+            results = self.providers.rt.request("/find-player", payload={"name": name.strip()})
+        except RivalsDataError:
+            results = self._post_json("/players/search", {"name": name.strip()})
+        if isinstance(results, dict):
+            results = results.get("players", results.get("results", []))
+        if not isinstance(results, list):
+            raise RivalsDataHTTPError("Search returned an invalid candidate list")
         found = {}
         for row in results:
+            if not isinstance(row, dict):
+                continue
             uid = self._uid_from_search_result(row)
             if uid is not None:
                 found[uid] = PlayerSearchResult({**row, "uid": uid})
@@ -260,8 +271,43 @@ class RivalsClient:
         if result.get("name"):
             self._player_names[int(uid)] = result["name"]
         if self.enrich:
+            self._enrich_ranks(result, int(uid))
             self._select_career_summary(result, int(uid))
         return Player(result, self)
+
+    def _enrich_ranks(self, result, uid):
+        from .ranks import tracker_ranks
+
+        name = self._player_names.get(uid)
+        if not name:
+            return
+        body = self._optional_provider("tracker", self._tracker_path(uid))
+        summary = tracker_ranks(body, name)
+        if not summary:
+            return
+        result["rank_summary"] = summary
+        ranks = result.setdefault("rank_game_season", {})
+        if not isinstance(ranks, dict):
+            return
+        for kind, field in (("current", "rank_score"), ("peak", "max_rank_score")):
+            row = summary[kind]
+            if row:
+                row["used_for_fallback"] = False
+            if not row or not str(row.get("season", "")).isdecimal():
+                continue
+            if kind == "peak" and any(isinstance(r, dict) and r.get("max_rank_score") is not None
+                                      for r in ranks.values()):
+                continue
+            season = int(row["season"])
+            existing = next((r for r in ranks.values() if isinstance(r, dict)
+                             and str(r.get("rank_game_id")) == str(season)), None)
+            if existing is None:
+                existing = ranks.setdefault(f"1001{season:03d}", {"rank_game_id": season})
+            if existing.get(field) is None:
+                row["used_for_fallback"] = True
+                existing[field] = row["rank_score"]
+                existing["provider_metadata"] = {"sources": ["tracker"], "rank_fallback": True,
+                                                 "private_snapshot": row["private_snapshot"]}
 
     def _select_career_summary(self, result: dict, uid: int) -> None:
         """Canonical career counts are distinct from raw rank-system counts."""
@@ -283,7 +329,12 @@ class RivalsClient:
                            "rivalstracker": {"kind": "career", "scope": scope}}}}
         segments = self._optional_provider("tracker", self._tracker_path(uid) + "/segments/career",
                                            params={"mode": "competitive", "season": season})
+        if segments is not None and not isinstance(segments, list):
+            self.provider_errors.append({"source": "tracker", "error": "Invalid career segment list"})
+            segments = []
         for segment in segments or []:
+            if not isinstance(segment, dict):
+                continue
             attrs = segment.get("attributes", {})
             if (segment.get("type") != "overview" or attrs.get("mode") != "competitive"
                     or str(attrs.get("season")) != str(season)):
@@ -305,6 +356,12 @@ class RivalsClient:
         return self.get_player(uid)
 
     def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
+        from .resilience import request
+
+        return request(self, "rivalsdata", [path, params or {}, bool(self.enrich)],
+                       lambda: self._get_json_live(path, params=params))
+
+    def _get_json_live(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         query = {key: value for key, value in (params or {}).items() if value is not None}
         response = self._request_with_gateway_retries(
             self.session.get, path, params=query
@@ -388,6 +445,12 @@ class RivalsClient:
             ) from exc
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> Any:
+        from .resilience import request
+
+        return request(self, "rivalsdata", [path, payload, bool(self.enrich)],
+                       lambda: self._post_json_live(path, payload))
+
+    def _post_json_live(self, path: str, payload: dict[str, Any]) -> Any:
         response = self._request_with_gateway_retries(
             self.session.post, path, json=payload
         )

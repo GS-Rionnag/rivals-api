@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.3.0 — 2026-10-04
+
+- Recover missing current and lifetime peak ranks from identity-verified Tracker
+  profiles. Preserve primary ranks and expose private-profile accuracy flags.
+- Keep usable private overall, hero, and class summaries with an explicit
+  accuracy warning rather than discarding their values.
+- Persist exact-request successful responses for outage fallback, with a default
+  24-hour maximum age and explicit stale metadata. Exclude live state, history,
+  forced refreshes, and stale current-season verification.
+- Fall back to RivalsData when RivalsTracker account search fails.
+
+See [fallback behavior](FALLBACKS.md) for coverage and limitations.
+
 ## 5.2.0 — 2026-10-04
 
 - Expose `partial_result` for overall summaries when only some requested modes

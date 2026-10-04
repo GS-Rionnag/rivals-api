@@ -37,6 +37,16 @@ class ProviderTransport:
 
     def request(self, path: str, *, params: dict | None = None,
                 payload: dict | None = None, refresh: bool = False) -> Any:
+        from .resilience import request
+
+        # Refresh is an explicit request for fresh evidence.
+        if refresh:
+            return self._request_live(path, params=params, payload=payload, refresh=True)
+        return request(self.owner, self.name, [path, params or {}, payload],
+                       lambda: self._request_live(path, params=params, payload=payload))
+
+    def _request_live(self, path: str, *, params: dict | None = None,
+                      payload: dict | None = None, refresh: bool = False) -> Any:
         # POST is only used for the provider's read-only name search.
         if payload is not None and (self.name != "rivalstracker" or path != "/find-player"):
             raise ValueError("Only read-only provider requests are supported")
