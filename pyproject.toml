@@ -5,8 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "rivals-api"
 version = "5.3.0"
-description = "Multi-source Python client and MCP server for Marvel Rivals player stats"
-keywords = ["marvel-rivals", "multi-source", "game-stats", "tracker", "mcp"]
+description = "Python client and MCP server for Marvel Rivals data from RivalsData, RivalsTracker, and Tracker.gg"
+keywords = ["marvel-rivals", "rivalsdata", "rivalstracker", "tracker-gg", "game-stats", "mcp"]
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
